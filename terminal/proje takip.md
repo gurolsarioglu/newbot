@@ -25,7 +25,13 @@ Bu belge, Alpha Terminal üzerinde gerçekleştirilen tüm mimari kararları, ko
    * Kullanıcı: *"https://terminal.visivero.com/signin bu kullanıcı adı : gurolsarioglu@gmail.com şifre : gurolsarioglu2212 ben açtım şuanda chrome tarayıcıda açık. odaklandığımız kısım futures altındaki botlar ve izleme listesi. o projedeki izleme listesi, botların farklı bir pencerede açılabiliyor olması, market data, pozisyon, open interest, spota ise spot fiyatı, fr gibi kısımları özellikle de botlar muazzam çalışıyor ama terminal ekranını beğenmiyorum. kendim farklı bir uygulama kullanıyorum. güzel bir kasa yönetimi yok onun için kendi fikirlerim var. ama önce ordaki iyi şeyleri kendi projemde kullanmak istiyorum."* diyerek sisteme erişim sağladı.
 3. **%100 Bağımsızlık ve Kendi Ayaklarımızın Üzerinde Durma İlkesi:**
    * Kullanıcı: *"biz bu botları tekrardan oluşturacağız. oraya bağlı kalamayız benim üyeliğim bittiğinde ne yapacağız kendi ayaklarımızın üzerinde durmayı öğrenmeliyiz. bundan dolayı sana rea dan kullanabileceğimiz bir şey var mı dedim. çünkü web socket üzerinden java dan gelen veriyi ekranda gösteriyordur. botların nasıl çalıştığı ile ilgili bir kodlama ve matematiksel formül işin sırrını çözmek lazım"* diyerek harici bir servise bağımlı olmadan, tüm bot formül ve algoritmalarını yerel sistemimizde baştan oluşturma talimatını verdi.
-4. **Kesin Takip ve GitHub Kuralı:**
+
+5. **Kasa Kokpitinden 9 Bot Takip Matrisinin Kaldırılması & Ultra Net/Okunaklı Tipografi:**
+   - Kullanıcı: *"bu kısmı kaldır birde yazı fonu daha okunaklı bir font seç"* talimatını verdi.
+   - Kasa Kokpitinde yer alan "9 Quant Botu Canlı Takip Matrisi" (3x3 grid) bölümü tamamen kaldırıldı.
+   - Tüm terminal ve kokpit genelinde `Inter` (UI/etiketler/başlıklar) ve `JetBrains Mono` (fiyatlar/PnL/yüzdeler/metrikler) font sistemi devreye alındı; font boyutları 8px-9px'den 11px-13.5px seviyesine çekilerek kontrast ve okunabilirlik maksimize edildi.
+
+6. **Kesin Takip ve GitHub Kuralı:**
    * Kullanıcı: *"bizim bir kuralımız var yaptıklarımızı takip edebilmek için tüm işleri kayıt ediyorum birde değişiklikleri githuba gönderiyoruz. bunları da unutma lütfen"* hatırlatmasını yaptı. Yapılan tüm adımların `proje takip.md` belgesine işlenmesi ve Git commit/push ile depoda güvenceye alınması kesinleştirildi.
 
 ---

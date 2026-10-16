@@ -337,6 +337,31 @@ biz visivero dan bağımsız bu botları yapıyoruz tüm yapımız ordan tersine
      - `fr`: SNPSUSDT (-0.0671%)
    - Sistem harici hiçbir sunucuya bağlanmadan %100 yerel ve otonom hale getirildi.
 
+---
 
+## 12. Adım: Kasa Kokpitinden 9 Bot Takip Matrisinin Kaldırılması & Ultra Net/Okunaklı Tipografi Revizyonu (Inter + JetBrains Mono)
 
+### 👤 Kullanıcı Talebi:
+```text
+bu kısmı kaldır birde yazı fonu daha okunaklı bir font seç
+(Ek: 9 QUANT BOTU CANLI TAKİP MATRİSİ 9/9 AKTİF 689 CANLI SİNYAL ekran görüntüsü)
+```
+
+### 🤖 Yapılan Değişiklikler ve Sonuç:
+1. **9 Bot Takip Matrisinin Kaldırılması:**
+   - `terminal/public/plugins/treasury-cockpit/treasury-cockpit.plugin.js` içerisinden `<!-- 3. 9 Bot Canlı Takip & Sermaye Tahsisat Matrisi -->` (3x3 grid) bölümü tamamen kaldırıldı.
+   - Sağ panelde zaten 9 botun bağımsız izleme butonları ve sinyal kartları yer aldığından, Kasa Kokpiti asıl işlevi olan **Kasa Özeti (5 Metrik Kartı)**, **Aktif Pozisyonlar & Kasa İcra Defteri** ve **SL'siz Kasa Marjin & Likidasyon Hesaplayıcısı**na odaklandı.
+   - Çalışma masası (`.workbench-split-grid`) doğrudan metriklerin altına alınarak genişletildi, ekranda ferah ve dengeli bir görünüm elde edildi.
+
+2. **Ultra Net ve Okunaklı Tipografi Revizyonu:**
+   - **Yazı Tipleri:** 
+     - Metinler, butonlar, etiketler ve başlıklar için: `Inter` (yüksek x-height, mükemmel ekran netliği).
+     - Sayılar, fiyatlar, yüzdeler, PnL ve formüller için: `JetBrains Mono` (`font-feature-settings: 'tnum' 1, 'zero' 1` ile rakamsal hizalama ve 0/O - 1/l ayrımı).
+   - **Doğrudan Yükleme:** `index.html` ve `bot-window.html` başlıklarına Google Fonts CDN bağlantıları eklendi (`preconnect` + `Inter` + `JetBrains Mono`).
+   - **Font Boyutları ve Kontrast İyileştirmesi:**
+     - 8px - 9px olan küçük ve silik metinler 10.5px - 13.5px aralığına yükseltildi.
+     - Düşük kontrastlı `#64748b` ve `#505866` renkleri `#cbd5e1`, `#94a3b8` ve saf `#ffffff` ile değiştirildi.
+     - `-webkit-font-smoothing: antialiased`, `text-rendering: optimizeLegibility` ve `-moz-osx-font-smoothing: grayscale` filtreleriyle Windows üzerinde piksellenme ve bulanıklık tamamen giderildi.
+3. **Görsel Doğrulama:**
+   - Tarayıcı alt ajanı ile `http://localhost:3000/` açılarak tam ekran görüntüsü alındı (`treasury_cockpit_verification_1792177797823.png`); matrisin kalktığı ve yeni font sisteminin kristal netliğinde çalıştığı doğrulandı.
 

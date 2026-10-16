@@ -241,18 +241,6 @@ const TreasuryCockpitPlugin = (() => {
           <!-- JS ile doldurulur -->
         </div>
 
-        <!-- 3. 9 Bot Canlı Takip & Sermaye Tahsisat Matrisi -->
-        <div class="section-wrapper">
-          <div class="section-header-row">
-            <div class="section-title">
-              <span>🤖 9 Quant Botu Canlı Takip Matrisi</span>
-              <span class="section-count-tag" id="active-bot-count-tag">9/9 Aktif</span>
-            </div>
-          </div>
-          <div class="bot-matrix-grid" id="bot-matrix-grid">
-            <!-- JS ile doldurulur -->
-          </div>
-        </div>
 
         <!-- 4. Alt Çalışma Masası (Pozisyonlar + SL'siz Marjin Hesaplayıcı) -->
         <div class="workbench-split-grid">
@@ -263,7 +251,7 @@ const TreasuryCockpitPlugin = (() => {
                 <span>📋 Aktif Pozisyon & Kasa İcra Defteri</span>
                 <span class="section-count-tag" id="pos-count-tag">3 Pozisyon</span>
               </div>
-              <div style="font-size:10px; color:#94a3b8; font-family:'SF Mono',Consolas,monospace;">
+              <div style="font-size:12px; color:#cbd5e1; font-family:'JetBrains Mono',monospace;">
                 Unrealized: <span id="pos-header-upnl" style="font-weight:700; color:#34d399;">+$132.80</span>
               </div>
             </div>
@@ -295,7 +283,7 @@ const TreasuryCockpitPlugin = (() => {
               <div class="panel-title">
                 <span>🧮 Kasa Marjin & Likidasyon Hesaplayıcı</span>
               </div>
-              <span style="font-size:9px; color:#38bdf8; font-weight:700;">SL'SİZ MARJİN KONTROLÜ</span>
+              <span style="font-size:11px; color:#38bdf8; font-weight:700; letter-spacing:0.3px;">SL'SİZ MARJİN KONTROLÜ</span>
             </div>
             <div class="calc-form">
               <div class="calc-row">
@@ -637,22 +625,22 @@ const TreasuryCockpitPlugin = (() => {
           </td>
           <td>
             <div style="font-weight:700;">${cur}</div>
-            <div style="font-size:9px; color:#64748b;">G: ${entry}</div>
+            <div style="font-size:10.5px; color:#94a3b8; font-family:'Inter',sans-serif;">G: ${entry}</div>
           </td>
-          <td>${amt}</td>
+          <td style="font-weight:600;">${amt}</td>
           <td>
-            <div>${formatMoney(margin)}</div>
-            <div style="font-size:9px; color:#38bdf8;">${lev}x</div>
+            <div style="font-weight:600;">${formatMoney(margin)}</div>
+            <div style="font-size:10.5px; color:#38bdf8; font-weight:700;">${lev}x</div>
           </td>
           <td>
             <div style="font-weight:700; color:#f87171;">${liq > 0 ? liq : 'Yok (1x)'}</div>
-            <div style="font-size:9px; color:${isLiqSafe ? '#34d399' : '#f59e0b'};">
+            <div style="font-size:10.5px; color:${isLiqSafe ? '#34d399' : '#f59e0b'}; font-weight:600;">
               ${liqDistPct.toFixed(1)}% ${isLiqSafe ? '🟢 Güvenli' : '⚠️ Dikkat'}
             </div>
           </td>
           <td>
             <div style="font-weight:700; color:#34d399;">${p.tp1 || '—'}</div>
-            <div style="font-size:9px; color:#64748b;">Hedef Kâr</div>
+            <div style="font-size:10.5px; color:#94a3b8; font-family:'Inter',sans-serif;">Hedef Kâr</div>
           </td>
           <td class="pos-pnl-cell ${isUp ? 'up' : 'down'}">
             ${isUp ? '+' : ''}${formatMoney(pnlUsd)} (${formatPercent(pnlPct)})
