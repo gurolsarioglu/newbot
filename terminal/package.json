@@ -1,0 +1,16 @@
+{
+  "name": "alpha-terminal",
+  "version": "1.0.0",
+  "description": "Alpha Terminal - Smart Money & Futures Analysis",
+  "main": "terminal-server.js",
+  "scripts": {
+    "start": "node terminal-server.js",
+    "test:regression": "node review/terminal-regression-tests.cjs",
+    "test:quant": "node review/quant-accuracy-verification.cjs",
+    "test:followup": "node review/terminal-followup-tests.cjs",
+    "test": "node review/terminal-regression-tests.cjs && node review/quant-accuracy-verification.cjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

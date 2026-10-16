@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ Alpha Bot — Bağımsız Monitör Penceresi</title>
+  <meta name="theme-color" content="#090c10" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="styles/terminal-pro.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #090c10;
+      color: #e2e8f0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    #detached-window-app {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      background: #0d1117;
+      border: 1px solid #1e293b;
+      box-sizing: border-box;
+    }
+
+    /* Üst Kontrol & Başlık Çubuğu */
+    .det-header {
+      background: #111620;
+      border-bottom: 1px solid #1e293b;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .det-bot-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .det-bot-title-box {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .det-bot-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .det-bot-sub {
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    .det-badge-count {
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+      letter-spacing: 0.3px;
+      margin-left: 6px;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+
+    .det-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .det-search-input {
+      background: #192231;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      width: 100px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .det-search-input:focus {
+      border-color: #38bdf8;
+      width: 130px;
+    }
+
+    .det-action-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .det-action-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #f59e0b;
+      color: #f59e0b;
+    }
+
+    .det-live-pill {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .det-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+      animation: pulse-live 1.5s infinite;
+    }
+
+    @keyframes pulse-live {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    /* Hızlı Bot Değiştirme Şeridi */
+    .det-switcher-bar {
+      background: #090c12;
+      border-bottom: 1px solid #1e293b;
+      padding: 4px 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .det-switcher-bar::-webkit-scrollbar {
+      height: 3px;
+    }
+    .det-switcher-bar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .det-bot-pill {
+      background: #141b26;
+      border: 1px solid #1e293b;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .det-bot-pill:hover {
+      color: #f8fafc;
+      border-color: #475569;
+    }
+
+    .det-bot-pill.active {
+      background: rgba(240, 185, 11, 0.15);
+      border-color: #f0b90b;
+      color: #f0b90b;
+    }
+
+    /* Özet Bant */
+    .det-summary-band {
+      background: #0d131c;
+      border-bottom: 1px solid #1e293b;
+      padding: 4px 12px;
+      font-size: 10px;
+      color: #94a3b8;
+      font-family: var(--font-mono, monospace);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    /* Sinyal Akış Listesi */
+    #det-signals-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #det-signals-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    #det-signals-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    /* Seçili/Senkronize Kart Görsel Vurgusu */
+    .signal-card {
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .signal-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(240, 185, 11, 0.4) !important;
+    }
+
+    .signal-card.active-synced {
+      border: 1px solid #f0b90b !important;
+      box-shadow: 0 0 12px rgba(240, 185, 11, 0.35) !important;
+      background: rgba(240, 185, 11, 0.05) !important;
+    }
+
+    .signal-card.active-synced::after {
+      content: '1. Ekranda Açık 📺';
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #f0b90b;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid rgba(240, 185, 11, 0.3);
+    }
+
+    /* Alt Durum Bildirim Toast */
+    #sync-toast {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #0284c7;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      transform: translateY(10px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #sync-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .det-close-btn {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      font-size: 13px;
+      font-weight: 800;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      line-height: 1;
+      margin-left: 2px;
+    }
+
+    .det-close-btn:hover {
+      background: #ef4444;
+      border-color: #ef4444;
+      color: #ffffff;
+      transform: scale(1.1);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+    }
+  </style>
+</head>
+<body>
+
+<div id="detached-window-app">
+
+  <!-- 1. ÜST KONTROL VE BAŞLIK ÇUBUĞU -->
+  <header class="det-header">
+    <div class="det-bot-info">
+      <div class="bot-header-icon" id="det-bot-icon">DIV</div>
+      <div class="det-bot-title-box">
+        <span class="det-bot-title" id="det-bot-title">
+          Divergence
+          <span class="det-badge-count" id="det-badge-count" title="Bot havuzundaki toplam aktif sinyal adedi">0 Sinyal</span>
+        </span>
+        <span class="det-bot-sub" id="det-bot-sub">Momentum and price relationship analysis</span>
+      </div>
+    </div>
+
+    <div class="det-header-actions">
+      <input type="text" id="det-search" class="det-search-input" placeholder="Sinyal Ara..." />
+      <button class="det-action-btn" id="btn-open-another" title="İkinci ekranda başka bir bot penceresi daha aç">
+        ➕ Başka Bot Aç
+      </button>
+      <button class="det-action-btn" id="btn-toggle-fullscreen" title="Adres ve başlık çubuğunu gizle (Çerçevesiz Tam Ekran)">
+        ⛶ Çerçevesiz
+      </button>
+      <div class="det-live-pill" title="1. Ekrandaki Terminal Kokpitine Canlı Bağlı">
+        <div class="det-live-dot"></div>
+        <span>CANLI</span>
+      </div>
+      <button class="det-close-btn" id="btn-close-window" title="Pencereyi Kapat">✕</button>
+    </div>
+  </header>
+
+  <!-- 2. HIZLI BOT SEÇİCİ ŞERİT (Sekmeler) -->
+  <nav class="det-switcher-bar" id="det-switcher-bar">
+    <!-- JS ile 9 bot sekmesi oluşturulur -->
+  </nav>
+
+  <!-- 3. ÖZET METRİK BANDI -->
+  <div class="det-summary-band">
+    <span id="det-summary-text">1H RSI Divergence | RSI-SMA Crosses | Today</span>
+    <span style="color:#64748b; font-size:9px;">Tıkla: 1. Ekrana Kilitler 📺</span>
+  </div>
+
+  <!-- 4. CANLI SİNYAL AKIŞI -->
+  <main id="det-signals-scroll">
+    <div style="text-align:center;color:#64748b;padding:30px;">Sinyaller yükleniyor...</div>
+  </main>
+
+  <!-- BİLDİRİM TOAST -->
+  <div id="sync-toast">
+    <span>📺</span>
+    <span id="sync-toast-text">1. Ekrana Gönderildi</span>
+  </div>
+
+</div>
+
+<script src="core/symbol-registry.js"></script>
+<script src="core/price-formatter.js"></script>
+<script src="plugins/bot-hub/coin-history-modal.js"></script>
+<script src="plugins/bot-hub/bot-renderer.js"></script>
+
+<script>
+  (function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    let currentBot = (urlParams.get('bot') || 'div').toLowerCase();
+    let currentSignals = [];
+    let activeSymbol = '';
+    let searchQuery = '';
+    let pollInterval = null;
+
+    // Toast Gösterici
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById('sync-toast');
+      const text = document.getElementById('sync-toast-text');
+      if (!toast || !text) return;
+      text.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    // Başlık ve Konfigürasyonu Güncelle
+    function updateHeaderInfo() {
+      const cfg = BotRenderer.BOT_CONFIGS[currentBot] || BotRenderer.BOT_CONFIGS.div;
+      document.title = `⚡ ${cfg.title} — Alpha Bot (2. Ekran)`;
+
+      const titleEl = document.getElementById('det-bot-title');
+      const subEl = document.getElementById('det-bot-sub');
+      const iconEl = document.getElementById('det-bot-icon');
+      const sumEl = document.getElementById('det-summary-text');
+      const countEl = document.getElementById('det-badge-count');
+
+      if (titleEl) {
+        titleEl.innerHTML = `${cfg.title} <span class="det-badge-count" id="det-badge-count" title="Bot havuzundaki toplam aktif sinyal adedi">${currentSignals.length} Sinyal</span>`;
+      }
+      if (subEl) subEl.textContent = cfg.subtitle;
+      if (sumEl) sumEl.textContent = cfg.summaryStats;
+
+      if (iconEl) {
+        if (cfg.iconHtml) {
+          iconEl.innerHTML = cfg.iconHtml;
+        } else {
+          iconEl.textContent = cfg.iconText;
+        }
+        iconEl.className = 'bot-header-icon ' + (cfg.iconClass || '');
+      }
+
+      // Sekmeleri güncelle
+      document.querySelectorAll('.det-bot-pill').forEach(pill => {
+        if (pill.dataset.bot === currentBot) pill.classList.add('active');
+        else pill.classList.remove('active');
+      });
+    }
+
+    // Hızlı Bot Değiştirici Sekmelerini Doldur
+    function renderSwitcherBar() {
+      const bar = document.getElementById('det-switcher-bar');
+      if (!bar) return;
+
+      const botOrder = ['m1a', 'm1premium', 'fr', 'v3', 'hammerpro', 'hammerproplus', '4s', '4ssniper', 'div'];
+      bar.innerHTML = botOrder.map(bId => {
+        const c = BotRenderer.BOT_CONFIGS[bId];
+        if (!c) return '';
+        const isActive = bId === currentBot;
+        return `
+          <button class="det-bot-pill ${isActive ? 'active' : ''}" data-bot="${bId}">
+            ${c.iconText || c.title}
+          </button>
+        `;
+      }).join('');
+
+      bar.querySelectorAll('.det-bot-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetBot = btn.dataset.bot;
+          if (targetBot) switchBot(targetBot);
+        });
+      });
+    }
+
+    // Sinyalleri Çek
+    async function fetchSignals() {
+      try {
+        const res = await fetch(`/api/signals?bot=${currentBot}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        currentSignals = data.signals || [];
+        renderSignals(true);
+      } catch (err) {
+        console.warn('[BotWindow] Sinyal çekme hatası:', err);
+      }
+    }
+
+    // Sinyalleri Render Et
+    function renderSignals(preserveScroll = false) {
+      const listEl = document.getElementById('det-signals-scroll');
+      if (!listEl) return;
+
+      const previousScroll = preserveScroll ? listEl.scrollTop : 0;
+      let displayList = currentSignals.slice();
+
+      if (searchQuery) {
+        const q = searchQuery.toUpperCase();
+        displayList = displayList.filter(s => s.symbol && s.symbol.toUpperCase().includes(q));
+      }
+
+      updateHeaderInfo();
+
+      if (!displayList.length) {
+        listEl.innerHTML = `
+          <div style="text-align:center;color:#64748b;padding:30px;font-size:12px;">
+            ${searchQuery ? `"${searchQuery}" ile eşleşen sinyal bulunamadı.` : 'Aktif sinyal bulunmuyor, piyasa taranıyor...'}
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = BotRenderer.generateSignalsHtml(currentBot, displayList);
+
+      // Aktif seçili sembolü vurgula
+      if (activeSymbol) {
+        highlightActiveCard(activeSymbol);
+      }
+
+      if (preserveScroll) {
+        listEl.scrollTop = previousScroll;
+      }
+    }
+
+    function highlightActiveCard(sym) {
+      activeSymbol = sym.toUpperCase();
+      document.querySelectorAll('.signal-card').forEach(card => {
+        if (card.dataset.symbol === activeSymbol) {
+          card.classList.add('active-synced');
+        } else {
+          card.classList.remove('active-synced');
+        }
+      });
+    }
+
+    function switchBot(newBotId) {
+      currentBot = newBotId.toLowerCase();
+      // URL'i güncelle (sayfa yenilenmeden)
+      const newUrl = `${window.location.pathname}?bot=${currentBot}`;
+      window.history.replaceState({ bot: currentBot }, '', newUrl);
+
+      currentSignals = [];
+      updateHeaderInfo();
+      fetchSignals();
+    }
+
+    function init() {
+      renderSwitcherBar();
+      updateHeaderInfo();
+      fetchSignals();
+
+      pollInterval = setInterval(fetchSignals, 3500);
+
+      // Sinyal Kartına Tıklandığında 1. EKRANA GÖNDER!
+      const scrollEl = document.getElementById('det-signals-scroll');
+      if (scrollEl) {
+        scrollEl.addEventListener('click', (e) => {
+          const card = e.target.closest('.signal-card');
+          if (!card) return;
+
+          const sym = card.dataset.symbol;
+          if (sym) {
+            highlightActiveCard(sym);
+            BotRenderer.broadcastSymbol(sym);
+            showToast(`1. Ekrana Kilitlendi: #${sym} 📺`);
+          }
+        });
+      }
+
+      // 1. Ekrandan veya başka pencerelerden gelen sembol değişikliklerini dinle
+      BotRenderer.onSymbolBroadcast((sym) => {
+        highlightActiveCard(sym);
+      });
+
+      // Arama filtresi
+      const searchInput = document.getElementById('det-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          searchQuery = e.target.value.trim();
+          renderSignals(false);
+        });
+      }
+
+      // "Başka Bot Aç" Butonu
+      const openAnotherBtn = document.getElementById('btn-open-another');
+      if (openAnotherBtn) {
+        openAnotherBtn.addEventListener('click', () => {
+          const nextBots = ['div', '4ssniper', 'v3', 'hammerproplus', 'm1a', 'm1premium', 'fr', '4s', 'hammerpro'];
+          const other = nextBots.find(b => b !== currentBot) || 'div';
+          BotRenderer.openBotWindow(other);
+        });
+      }
+
+      // "Pencereyi Kapat" Butonu
+      const closeBtn = document.getElementById('btn-close-window');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          window.close();
+        });
+      }
+
+      // "Çerçevesiz Tam Ekran" Butonu (Adres çubuğu ve başlığı tamamen gizler)
+      const fsBtn = document.getElementById('btn-toggle-fullscreen');
+      if (fsBtn) {
+        fsBtn.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+            fsBtn.textContent = '🗗 Pencereye Dön';
+          } else {
+            document.exitFullscreen().catch(() => {});
+            fsBtn.textContent = '⛶ Çerçevesiz';
+          }
+        });
+        document.addEventListener('fullscreenchange', () => {
+          if (document.fullscreenElement) {
+            fsBtn.textContent = '🗗 Pencereye Dön';
+          } else {
+            fsBtn.textContent = '⛶ Çerçevesiz';
+          }
+        });
+      }
+    }
+
+    init();
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "Alpha Bot Window",
+  "short_name": "AlphaBot",
+  "start_url": "/bot-window.html",
+  "display": "standalone",
+  "background_color": "#090c10",
+  "theme_color": "#090c10",
+  "description": "Alpha Terminal Bağımsız Bot İstasyonu (2. Ekran)",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

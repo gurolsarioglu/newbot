@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Trading Co-Pilot | 2. Ekran Masaüstü Asistanı</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Üst Başlık & Durum Çubuğu -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="pulse-indicator online" id="statusDot"></div>
+        <div class="brand-text">
+          <h1>AI TRADING CO-PILOT</h1>
+          <span class="sub-badge" id="copilotModeBadge">Proaktif 5m Gözlemci</span>
+        </div>
+      </div>
+
+      <!-- Canlı Pozisyon Şeridi -->
+      <div class="position-ticker" id="positionTicker">
+        <span class="ticker-empty">Pozisyon bekleniyor... (Binance Read-Only)</span>
+      </div>
+
+      <!-- Kontroller -->
+      <div class="header-actions">
+        <button id="voiceAlertBtn" class="icon-btn active" title="Sesli Bildirim Aç/Kapat">
+          🔊 <span class="btn-label">Ses Açık</span>
+        </button>
+        <button id="manualTriggerBtn" class="action-btn" title="Hemen Şimdi Analiz Et">
+          ⚡ Analiz Et
+        </button>
+        <button id="settingsBtn" class="icon-btn" title="API & Ayarlar">
+          ⚙️
+        </button>
+      </div>
+    </header>
+
+    <!-- Hızlı Multi-Timeframe & Akıllı Para Radarı (2. Ekran Metrikleri) -->
+    <section class="tf-radar-bar" id="tfRadarBar">
+      <div class="radar-item">
+        <span class="tf-label">5M PARA AKIŞI (OI):</span>
+        <span class="tf-val" id="radarOi5m">--</span>
+      </div>
+      <div class="radar-item">
+        <span class="tf-label">4H BÜYÜK TREND (OI):</span>
+        <span class="tf-val" id="radarOi4h">--</span>
+      </div>
+      <div class="radar-item">
+        <span class="tf-label">FONLAMA (FR):</span>
+        <span class="tf-val highlight-funding" id="radarFunding">--</span>
+      </div>
+      <div class="radar-item">
+        <span class="tf-label">TOP TRADER (BÜYÜKLER):</span>
+        <span class="tf-val" id="radarTopTraders">--</span>
+      </div>
+      <div class="radar-item">
+        <span class="tf-label">TAKER BUY/SELL:</span>
+        <span class="tf-val" id="radarTaker">--</span>
+      </div>
+    </section>
+
+    <!-- Ana Sohbet & Proaktif Akış Alanı -->
+    <main class="chat-feed" id="chatFeed">
+      <!-- Hoşgeldin Kartı -->
+      <div class="message-card system-card">
+        <div class="msg-header">
+          <span class="msg-badge">🤖 CO-PILOT DEVREDE</span>
+          <span class="msg-time">Şimdi</span>
+        </div>
+        <div class="msg-body">
+          <p><strong>Hoş geldin!</strong> Masaüstü AI Co-Pilot arka planda çalışıyor.</p>
+          <ul>
+            <li>İşlem açtığında (Binance Read-Only) anında algılayıp takibe başlar.</li>
+            <li>Her <strong>5 dakikalık mum kapanışında</strong> 15m, 1h ve 4h trendini, derinlik duvarlarını inceleyip buraya tavsiyesini yazar.</li>
+            <li>Aşağıdaki mikrofona basarak konuşabilir veya soru yazabilirsin: <em>"14'e dayandı, kâr alayım mı?"</em></li>
+          </ul>
+        </div>
+      </div>
+    </main>
+
+    <!-- Alt Soru & Sesle Komut Alanı -->
+    <footer class="app-footer">
+      <div class="input-container">
+        <!-- Ekran / Resim Ekleme Önizlemesi -->
+        <div class="image-preview-container" id="imagePreviewContainer" style="display: none;">
+          <img id="imagePreview" src="" alt="Görsel">
+          <button id="removeImageBtn">✕</button>
+        </div>
+
+        <input type="text" id="userInput" placeholder="Co-Pilot'a sor... (örn: 14'e dayandı kâr alayım mı? veya Ctrl+V ile ekran yapıştır)" autocomplete="off">
+
+        <button id="micBtn" class="mic-btn" title="Sesli Soru Sor (Mikrofon)">
+          🎙️
+        </button>
+
+        <label for="imageUploadInput" class="upload-btn" title="Ekran Görüntüsü Yükle">
+          📷
+          <input type="file" id="imageUploadInput" accept="image/*" style="display: none;">
+        </label>
+
+        <button id="sendBtn" class="send-btn">
+          Gönder
+        </button>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Ayarlar Modalı -->
+  <div class="modal-overlay" id="settingsModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>⚙️ Co-Pilot & API Ayarları</h2>
+        <button id="closeModalBtn" class="close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Google Gemini API Key (Pro / Flash):</label>
+          <input type="password" id="cfgGeminiKey" placeholder="AIzaSy...">
+          <small>AI Studio'dan aldığınız API anahtarı.</small>
+        </div>
+
+        <div class="form-group">
+          <label>Binance Read-Only API Key:</label>
+          <input type="password" id="cfgBinanceKey" placeholder="Yalnızca 'Read-Only' izinli API Key">
+        </div>
+
+        <div class="form-group">
+          <label>Binance Read-Only API Secret:</label>
+          <input type="password" id="cfgBinanceSecret" placeholder="API Secret">
+          <small class="text-safe">🔒 Para çekme veya emir açma yetkisi VERMEYİN. Yalnızca pozisyon okumak içindir.</small>
+        </div>
+
+        <div class="form-group">
+          <label>Test İçin Manuel Sembol (API bağlamadan denemek için):</label>
+          <input type="text" id="cfgManualSymbol" placeholder="Örn: NMRUSDT, BTCUSDT">
+        </div>
+
+        <div class="form-group row">
+          <label>
+            <input type="checkbox" id="cfgProactiveToggle" checked> Her 5 dakikada bir otomatik analiz et
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="saveSettingsBtn" class="primary-btn">Kaydet & Başlat</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

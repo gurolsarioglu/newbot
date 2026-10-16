@@ -1,0 +1,1214 @@
+/* ═══════════════════════════════════════════════════
+   ALPHA TERMINAL — Dark Glassmorphism Tema
+   ═══════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-base:        #0b0e11;
+  --bg-card:        rgba(18, 22, 28, 0.85);
+  --bg-glass:       rgba(255,255,255,0.04);
+  --border:         rgba(255,255,255,0.07);
+  --border-bright:  rgba(255,255,255,0.13);
+
+  --green:      #0ecb81;
+  --green-dim:  rgba(14,203,129,0.15);
+  --green-glow: rgba(14,203,129,0.3);
+  --red:        #f6465d;
+  --red-dim:    rgba(246,70,93,0.15);
+  --red-glow:   rgba(246,70,93,0.3);
+  --gold:       #f0b90b;
+  --gold-dim:   rgba(240,185,11,0.15);
+  --blue:       #1890ff;
+  --blue-dim:   rgba(24,144,255,0.15);
+  --purple:     #9b59b6;
+
+  --text-primary:   #eaecef;
+  --text-secondary: #848e9c;
+  --text-muted:     #474d57;
+
+  --header-h:   48px;
+  --gap:        6px;
+  --radius:     8px;
+  --radius-sm:  5px;
+
+  --font-main:  'Inter', sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+}
+
+/* ─── Reset ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ─── Header ─────────────────────────────────────── */
+#header {
+  height: var(--header-h);
+  background: rgba(11, 14, 17, 0.98);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
+/* Coin Arama */
+#coin-search-wrapper { position: relative; flex: 0 0 180px; }
+
+#coin-input {
+  width: 100%;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  outline: none;
+  transition: border-color .2s;
+  text-transform: uppercase;
+}
+#coin-input:focus { border-color: var(--gold); }
+#coin-input::placeholder { color: var(--text-muted); text-transform: none; font-weight: 400; }
+
+#coin-suggestions {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; width: 100%;
+  background: #161a1f;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 200;
+}
+#coin-suggestions.show { display: block; }
+.suggestion-item {
+  padding: 7px 12px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: background .15s;
+}
+.suggestion-item:hover { background: var(--bg-glass); color: var(--gold); }
+
+/* Interval Butonları */
+#interval-bar { display: flex; gap: 2px; }
+.interval-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.interval-btn:hover { color: var(--text-primary); border-color: var(--border); }
+.interval-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+
+/* Canlı badge */
+#live-badge { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.live-dot.disconnected { background: var(--red); animation: none; }
+.live-dot.reconnecting { background: var(--gold); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .4; transform: scale(.7); }
+}
+
+/* ─── Ana Layout ─────────────────────────────────── */
+#app {
+  height: calc(100vh - var(--header-h));
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  overflow: hidden;
+}
+
+/* Üst Satır: Grafik + Smart Money */
+#top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 295px;
+  gap: var(--gap);
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* Alt Bölüm */
+#bottom-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  flex-shrink: 0;
+}
+
+/* ─── Kart ────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+/* ─── Grafik Paneli ──────────────────────────────── */
+#chart-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ─── Binance Futures Ticker Bar (Birebir Binance Tarzı) ──── */
+#binance-ticker-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 5px 12px;
+  background: rgba(14, 18, 23, 0.95);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.btb-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.btb-symbol-box {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+}
+.btb-star {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: color .15s;
+}
+.btb-star:hover { color: var(--gold); }
+.btb-coin-icon { font-size: 13px; }
+.btb-symbol-text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: .3px;
+}
+.btb-badge-perp {
+  font-size: 8px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.btb-price-box {
+  flex-direction: column;
+  gap: 0px;
+}
+.btb-big-price {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  transition: color .2s;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.btb-big-price.up   { color: var(--green); }
+.btb-big-price.down { color: var(--red); }
+
+.btb-change-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.btb-change-pill.up   { color: var(--green); }
+.btb-change-pill.down { color: var(--red); }
+
+.btb-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.btb-lbl {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: .2px;
+}
+.btb-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btb-funding-box {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.btb-funding-val {
+  color: var(--gold);
+}
+.btb-funding-val.bull { color: var(--green); }
+.btb-funding-val.warn { color: var(--gold); }
+.btb-countdown {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.btb-oi-box {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.btb-oi-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.btb-oi-val {
+  font-weight: 700;
+  color: #fff;
+}
+
+.btb-smart-tag {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+  letter-spacing: .3px;
+}
+.btb-smart-tag.bull    { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-glow); }
+.btb-smart-tag.bear    { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-glow); }
+.btb-smart-tag.neutral { background: var(--bg-glass);  color: var(--text-secondary); }
+
+/* ─── Pozisyonum & Tek Bakışta Karar Rozeti ───────────────── */
+.btb-pos-box {
+  background: rgba(24, 144, 255, 0.08);
+  border: 1px solid rgba(24, 144, 255, 0.35);
+  border-radius: 4px;
+  padding: 3px 8px;
+  gap: 2px;
+}
+.btb-pos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.btb-pos-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.btb-pos-prefix {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+#btb-entry-input {
+  width: 72px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #1890ff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(24, 144, 255, 0.45);
+  border-radius: 3px;
+  text-align: right;
+  outline: none;
+  transition: all .2s;
+}
+#btb-entry-input:focus {
+  border-color: #1890ff;
+  box-shadow: 0 0 6px rgba(24, 144, 255, 0.5);
+  background: rgba(0, 0, 0, 0.7);
+}
+.btb-pnl-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 2px;
+  letter-spacing: .2px;
+}
+.btb-pnl-pill.up   { background: var(--green-dim); color: var(--green); }
+.btb-pnl-pill.down { background: var(--red-dim);   color: var(--red);   }
+.btb-pnl-pill.neutral { color: var(--text-muted); }
+
+.btb-decision-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: .3px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.btb-decision-badge.bull {
+  background: rgba(14, 203, 129, 0.2);
+  color: var(--green);
+  border: 1px solid var(--green);
+  box-shadow: 0 0 6px rgba(14, 203, 129, 0.2);
+}
+.btb-decision-badge.bear {
+  background: rgba(246, 70, 93, 0.25);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.btb-decision-badge.warn {
+  background: rgba(240, 185, 11, 0.2);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+}
+.btb-decision-badge.gold {
+  background: rgba(240, 185, 11, 0.35);
+  color: #fff;
+  border: 1px solid var(--gold);
+  font-weight: 900;
+  box-shadow: 0 0 10px rgba(240, 185, 11, 0.4);
+}
+
+.btb-notify-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.btb-notify-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.btb-notify-btn.active {
+  background: rgba(14, 203, 129, 0.2);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.chart-ohlc-legend {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-ohlc-legend span.val {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.chart-ohlc-legend span.val.up   { color: var(--green); }
+.chart-ohlc-legend span.val.down { color: var(--red); }
+
+#indicator-toggles { display: flex; gap: 5px; padding: 5px 12px; flex-shrink: 0; }
+.ind-toggle {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 10px; color: var(--text-secondary);
+  cursor: pointer; padding: 2px 6px;
+  border: 1px solid var(--border); border-radius: 3px;
+  transition: all .15s; user-select: none;
+}
+.ind-toggle.active { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.ind-toggle input { display: none; }
+
+#echarts-container {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ─── RSI Sub-Chart Pane ─────────────────────────────── */
+.rsi-pane {
+  height: 110px;
+  flex: 0 0 110px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #0b0e11;
+  transition: all .15s ease;
+}
+.rsi-pane.hidden {
+  display: none !important;
+}
+.rsi-header {
+  position: absolute;
+  top: 4px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  pointer-events: none;
+  background: rgba(11, 14, 17, 0.75);
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rsi-title {
+  color: #c084fc;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.rsi-legend-val {
+  color: var(--text-secondary);
+}
+.rsi-legend-val .rsi-v {
+  color: #c084fc;
+  font-weight: 600;
+}
+.rsi-legend-val .sma-v {
+  color: #f0b90b;
+  font-weight: 600;
+}
+.rsi-legend-val .sep {
+  color: rgba(255, 255, 255, 0.15);
+  margin: 0 2px;
+}
+#rsi-chart-container {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
+/* ─── Smart Money & Canlı Balina Kokpiti (Sağ Panel) ───── */
+#smart-money-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+#smart-money-panel::-webkit-scrollbar {
+  width: 4px;
+}
+#smart-money-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+/* 1. Akıllı Para Güç İbresi (SMI) Kartı */
+.smi-card {
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(20, 26, 35, 0.95), rgba(12, 16, 22, 0.95));
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.05);
+}
+.smi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.smi-title {
+  font-size: 9px;
+  font-weight: 800;
+  color: #00f0ff;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+.smi-score {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+.smi-meter-track {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+.smi-meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .6s cubic-bezier(0.4, 0, 0.2, 1), background .4s;
+  box-shadow: 0 0 8px rgba(14, 203, 129, 0.4);
+}
+.smi-status-row {
+  display: flex;
+  justify-content: center;
+}
+.smi-status-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-align: center;
+}
+.smi-status-badge.bull-extreme {
+  background: rgba(0, 240, 255, 0.15);
+  color: #00f0ff;
+  border: 1px solid #00f0ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+}
+.smi-status-badge.bull {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+.smi-status-badge.bear-extreme {
+  background: rgba(246, 70, 93, 0.25);
+  color: var(--red);
+  border: 1px solid var(--red);
+  box-shadow: 0 0 8px rgba(246, 70, 93, 0.4);
+}
+.smi-status-badge.bear {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.smi-status-badge.neutral {
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+/* L/S Kartları Genel */
+.ls-card {
+  padding: 7px 10px;
+  transition: border-color .2s;
+}
+.ls-card:hover {
+  border-color: var(--border-bright);
+}
+.ls-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+.ls-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.ls-delta-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.ls-delta-badge.bull {
+  background: var(--green-dim);
+  color: var(--green);
+}
+.ls-delta-badge.bear {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.ls-delta-badge.neutral {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
+.ls-ratio-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.ls-ratio-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+.ls-ratio-value.bull    { color: var(--green); }
+.ls-ratio-value.bear    { color: var(--red); }
+.ls-ratio-value.neutral { color: var(--text-secondary); }
+
+.ls-trend-hint {
+  font-size: 8px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ls-bar-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 3px;
+  display: flex;
+}
+.ls-bar-long  { height: 100%; background: linear-gradient(90deg, var(--green), rgba(14,203,129,.4)); transition: width .5s; }
+.ls-bar-short { height: 100%; background: linear-gradient(90deg, rgba(246,70,93,.4), var(--red));   transition: width .5s; }
+
+.ls-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+.ls-long-pct   { color: var(--green); font-weight: 600; }
+.ls-short-pct  { color: var(--red);   font-weight: 600; }
+.ls-note       { font-size: 8.5px; color: var(--text-muted); margin-top: 2px; }
+
+/* 6. Canlı Balina & Likidasyon Radarı */
+.whale-radar-card {
+  padding: 7px 10px;
+  background: rgba(14, 18, 23, 0.95);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+.whale-radar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 5px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.whale-radar-title {
+  font-size: 9px;
+  font-weight: 800;
+  color: #00f0ff;
+  letter-spacing: .5px;
+}
+.whale-radar-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 6px #00f0ff;
+  animation: pulse-dot 1.5s infinite;
+}
+
+.whale-radar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.whale-radar-list::-webkit-scrollbar {
+  width: 3px;
+}
+.whale-radar-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.whale-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  padding: 2.5px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid transparent;
+  animation: fadeInDown .25s ease-out;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.whale-item.badge-buy {
+  background: rgba(14, 203, 129, 0.08);
+  border-left-color: var(--green);
+}
+.whale-item.badge-buy .whale-badge { color: var(--green); font-weight: 700; }
+
+.whale-item.badge-sell {
+  background: rgba(246, 70, 93, 0.08);
+  border-left-color: var(--red);
+}
+.whale-item.badge-sell .whale-badge { color: var(--red); font-weight: 700; }
+
+.whale-item.badge-liq {
+  background: rgba(240, 185, 11, 0.12);
+  border-left-color: var(--gold);
+}
+.whale-item.badge-liq .whale-badge { color: var(--gold); font-weight: 800; }
+
+.whale-time  { color: var(--text-muted); font-size: 8px; }
+.whale-amt   { color: #fff; font-weight: 700; }
+.whale-price { color: var(--text-secondary); font-size: 8px; }
+
+.whale-item.empty {
+  color: var(--text-muted);
+  font-style: italic;
+  justify-content: center;
+  padding: 8px 0;
+  border-left: none;
+}
+
+/* ─── Data Charts Grid (6 Mini Grafik) ──────────── */
+#data-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 130px);
+  gap: var(--gap);
+}
+
+.mini-chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.mini-chart-card:hover { border-color: var(--border-bright); }
+
+.mini-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 6px 10px 2px;
+  flex-shrink: 0;
+}
+
+.mini-chart-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  line-height: 1.3;
+}
+
+.mini-chart-values { text-align: right; }
+
+.mini-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+  line-height: 1.3;
+}
+
+.mini-delta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  display: block;
+  line-height: 1.2;
+}
+.mini-delta.up   { color: var(--green); }
+.mini-delta.down { color: var(--red); }
+
+.mini-chart-canvas { flex: 1 1 0; min-height: 0; }
+
+/* ─── Verdict Şeridi & Taktik Kontrol Merkezi ────── */
+#verdict-panel {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  overflow: visible;
+  transition: border-color .4s, background .4s, box-shadow .4s;
+  flex-shrink: 0;
+  background: var(--bg-card);
+}
+#verdict-panel::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: var(--radius);
+  background: var(--verdict-bg, var(--bg-glass));
+  transition: background .4s;
+  z-index: 0;
+}
+#verdict-panel > * { position: relative; z-index: 1; }
+
+.verdict-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#verdict-icon { font-size: 20px; flex-shrink: 0; }
+
+#verdict-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.verdict-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.verdict-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.tele-item {
+  padding: 1.5px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+.tele-item.trigger {
+  color: var(--green);
+  border-color: rgba(14, 203, 129, 0.35);
+}
+.tele-item.trigger.near-trigger {
+  color: #00f0ff;
+  border-color: #00f0ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  animation: pulse-border 1s infinite;
+}
+.tele-item.trigger.confirmed {
+  background: rgba(14, 203, 129, 0.25);
+  color: #fff;
+  border-color: var(--green);
+  box-shadow: 0 0 10px rgba(14, 203, 129, 0.5);
+}
+
+.tele-item.stop {
+  color: var(--red);
+  border-color: rgba(246, 70, 93, 0.35);
+}
+.tele-item.stop.near-stop {
+  border-color: var(--red);
+  box-shadow: 0 0 8px rgba(246, 70, 93, 0.4);
+  animation: pulse-border 1s infinite;
+}
+.tele-item.stop.breached {
+  background: rgba(246, 70, 93, 0.3);
+  color: #fff;
+  font-weight: 800;
+}
+
+.tele-item.target {
+  color: var(--gold);
+  border-color: rgba(240, 185, 11, 0.35);
+}
+.tele-item.rr {
+  color: #1890ff;
+  border-color: rgba(24, 144, 255, 0.35);
+}
+
+.verdict-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  display: inline-block;
+  width: fit-content;
+  line-height: 1.4;
+}
+.verdict-badge.neutral    { background: var(--bg-glass); color: var(--text-secondary); border: 1px solid var(--border); }
+.verdict-badge.bull,
+.verdict-badge.bull-flash { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-glow); }
+.verdict-badge.bear       { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-glow); }
+.verdict-badge.warn       { background: var(--gold-dim);  color: var(--gold);  border: 1px solid rgba(240,185,11,.4); }
+.verdict-badge.gold       { background: var(--gold-dim);  color: var(--gold);  border: 1px solid var(--gold); }
+
+#verdict-text {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#verdict-text strong { font-size: 11.5px; color: #fff; }
+
+/* Taktik Seviyeler Barı */
+#verdict-tactical-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.tactical-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tactical-field label {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: .5px;
+}
+.tactical-field input {
+  width: 72px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 5px;
+  outline: none;
+  text-align: right;
+  transition: all .2s;
+}
+.tactical-field input:focus { border-color: var(--gold); }
+.tactical-field input.input-saved {
+  border-color: var(--green) !important;
+  box-shadow: 0 0 8px rgba(14, 203, 129, 0.5);
+  background: rgba(14, 203, 129, 0.1);
+}
+
+#tac-update-btn {
+  background: var(--gold-dim);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  align-self: flex-end;
+  transition: all .2s;
+  white-space: nowrap;
+}
+#tac-update-btn:hover {
+  background: var(--gold);
+  color: #0b0e11;
+}
+#tac-update-btn.saved {
+  background: rgba(14, 203, 129, 0.25) !important;
+  border-color: var(--green) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(14, 203, 129, 0.6);
+}
+
+/* Aksiyon Butonları */
+#verdict-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.action-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+}
+.action-btn.active {
+  background: var(--blue-dim);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.action-btn.test-btn {
+  background: var(--gold-dim);
+  border-color: rgba(240,185,11,.4);
+  color: var(--gold);
+}
+.action-btn.test-btn:hover {
+  background: var(--gold);
+  color: #0b0e11;
+}
+
+#verdict-panel.bull { border-color: var(--green-glow); --verdict-bg: var(--green-dim); }
+#verdict-panel.bear { border-color: var(--red-glow);   --verdict-bg: var(--red-dim); }
+#verdict-panel.warn { border-color: rgba(240,185,11,.35); --verdict-bg: var(--gold-dim); }
+#verdict-panel.gold { border-color: var(--gold); --verdict-bg: var(--gold-dim); }
+#verdict-panel.neutral { border-color: var(--border); --verdict-bg: var(--bg-glass); }
+
+#verdict-panel.bull-flash {
+  border-color: var(--green);
+  --verdict-bg: var(--green-dim);
+  animation: pulse-verdict-green 1.5s infinite;
+}
+
+@keyframes pulse-verdict-green {
+  0%, 100% { box-shadow: 0 0 10px rgba(14,203,129,0.25); border-color: var(--green-glow); }
+  50%       { box-shadow: 0 0 22px rgba(14,203,129,0.6);  border-color: var(--green); }
+}
+
+/* ─── Canlı Akış Günlüğü (Feed Drawer) ─────────────── */
+.feed-drawer {
+  position: absolute;
+  right: 14px;
+  bottom: 64px;
+  width: 390px;
+  max-height: 420px;
+  background: rgba(18, 22, 28, 0.96);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  z-index: 999;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.65);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity .2s, transform .2s;
+}
+.feed-drawer.hidden { display: none; }
+
+.feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.2);
+}
+.feed-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: .5px;
+}
+.feed-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all .15s;
+}
+.feed-close:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+
+.feed-list {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-item {
+  background: var(--bg-glass);
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.feed-item.bull { border-left-color: var(--green); background: rgba(14,203,129,0.07); }
+.feed-item.bear { border-left-color: var(--red);   background: rgba(246,70,93,0.07); }
+.feed-item.gold { border-left-color: var(--gold);  background: rgba(240,185,11,0.07); }
+
+.feed-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.feed-item-title { font-weight: 700; color: var(--text-primary); font-size: 10px; }
+.feed-item-time  { margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: 9px; }
+.feed-item-body  { color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.feed-empty      { padding: 24px; text-align: center; color: var(--text-muted); font-size: 11px; }
+
+/* ─── Yardımcılar ────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+@keyframes flash-green { 0%, 100% { background: transparent; } 50% { background: var(--green-dim); } }
+@keyframes flash-red   { 0%, 100% { background: transparent; } 50% { background: var(--red-dim); } }
+.flash-green { animation: flash-green .4s ease; }
+.flash-red   { animation: flash-red   .4s ease; }

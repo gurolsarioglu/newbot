@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ Alpha Terminal — Bot Takip & Kasa Yönetimi Kokpiti</title>
+  <meta name="description" content="Binance Futures 9-Bot Tracking Station and Professional Treasury & Risk Management Cockpit." />
+  <link rel="stylesheet" href="styles/terminal-pro.css" />
+  <link rel="stylesheet" href="styles/treasury-cockpit.css" />
+  <script src="libs/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+
+<div id="app-layout">
+
+  <!-- ─── 1. TOP HEADER ─────────────────────────────────────────── -->
+  <header id="top-header">
+    <div class="header-left">
+      <div class="logo-badge" style="background: linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(56,189,248,0.25) 100%); border: 1px solid rgba(56,189,248,0.4); box-shadow: 0 0 10px rgba(56,189,248,0.2);">
+        <span>🛡️</span>
+        <span style="color:#f8fafc; font-weight:800; letter-spacing:0.5px;">ALPHA KASA & BOT KOKPİTİ</span>
+      </div>
+
+      <div class="search-box-wrap">
+        <span class="search-icon-inside">🔍</span>
+        <input type="text" id="coin-search-input" class="search-input" value="BTWUSDT" placeholder="BTWUSDT" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="cockpit-quick-tags" style="display:flex; align-items:center; gap:8px; margin-left:8px;">
+        <span class="wl-filter-pill active" style="font-size:10px; font-weight:700; background:rgba(16,185,129,0.18); color:#6ee7b7; border: 1px solid rgba(16,185,129,0.4);">
+          💼 Kasa: $10,000.00
+        </span>
+        <span class="wl-filter-pill" style="font-size:10px; font-weight:700; background:rgba(56,189,248,0.15); color:#7dd3fc; border: 1px solid rgba(56,189,248,0.35);">
+          🛡️ Mod: Stop-Loss'suz (Marjin Kontrolü)
+        </span>
+        <span class="wl-filter-pill" style="font-size:10px; font-weight:700; background:rgba(245,158,11,0.15); color:#fbbf24; border: 1px solid rgba(245,158,11,0.35);">
+          🤖 9 Quant Botu Aktif
+        </span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="binance-pill">
+        <span>🟡</span>
+        <span>Binance Futures</span>
+      </div>
+      <div class="live-indicator">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="live-status-text">CANLI</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── 2. MAIN BODY ──────────────────────────────────────────── -->
+  <div id="main-body">
+
+    <!-- SOL: Çizim Araç Çubuğu (Grafikler devre dışı bırakıldığı için gizlendi) -->
+    <aside id="left-drawing-toolbar" style="display: none;"></aside>
+
+    <!-- ORTA: Bot Takip Ekranı & Kasa Yönetimi Alanı (Treasury Cockpit Viewport) -->
+    <main id="charts-viewport" style="flex: 1; display: flex; flex-direction: column; background: #080b10; overflow: hidden; min-width: 0; min-height: 0;"></main>
+
+    <!-- SAĞ: Watchlist + Ticker Snapshot + Çoklu Bot İstasyonu -->
+    <aside id="right-sidebar">
+
+      <!-- 3A. WATCHLIST (731 Coin) -->
+      <section id="watchlist-widget">
+        <div class="wl-header">
+          <div class="wl-title-wrap">
+            <span class="wl-title">Watchlist</span>
+            <span class="wl-count" id="wl-coin-count">731</span>
+          </div>
+          <div class="wl-controls">
+            <button class="wl-filter-pill active" data-filter="all">Tümü</button>
+            <button class="wl-filter-pill" data-filter="favorites" title="Yıldızlanan Favori Coinler">⭐ Favoriler</button>
+            <button class="wl-filter-pill" data-filter="gainers" title="En Çok Yükselenler">📈 Yükselenler</button>
+            <button class="wl-filter-pill" data-filter="losers" title="En Çok Düşenler">📉 Düşenler</button>
+            <button class="wl-filter-pill" data-filter="funding" title="Ekstrem Negatif / Squeeze Fonlamaları">💰 Ekstrem FR</button>
+            <button class="wl-filter-pill" data-filter="volume" title="İşlem Hacmine Göre Sırala">📊 Hacim</button>
+          </div>
+        </div>
+        <div class="wl-table-wrap" id="watchlist-table-wrap">
+          <table class="wl-table">
+            <thead>
+              <tr>
+                <th style="width: 22px; text-align: center;" title="Favori">⭐</th>
+                <th data-sort="symbol" class="sortable-th">Symbol <span class="sort-icon" id="sort-icon-symbol"></span></th>
+                <th data-sort="price" class="sortable-th">Price <span class="sort-icon" id="sort-icon-price"></span></th>
+                <th data-sort="chg" class="sortable-th">Chg% <span class="sort-icon" id="sort-icon-chg"></span></th>
+                <th data-sort="vol" class="sortable-th">Vol (USD) <span class="sort-icon" id="sort-icon-vol"></span></th>
+                <th data-sort="fr" class="sortable-th">FR (%) <span class="sort-icon" id="sort-icon-fr"></span></th>
+                <th>FR (h)</th>
+              </tr>
+            </thead>
+            <tbody id="wl-tbody">
+              <!-- JavaScript ile doldurulur -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3B. SEÇİLİ COIN SNAPSHOT (Fiyat, Funding, OI, L/S & 200 Günlük Analiz) -->
+      <section id="ticker-snapshot-widget">
+        <div class="snapshot-row-top">
+          <div class="snapshot-coin-info">
+            <div class="snapshot-icon">🟢</div>
+            <span class="snapshot-symbol" id="snap-symbol">BTWUSDT.P</span>
+            <span class="snapshot-perp-tag">Perp</span>
+          </div>
+          <div class="snapshot-funding-box">
+            <div>Funding (4h) <span class="snapshot-funding-val" id="snap-funding-val">0.02081% ↗</span></div>
+            <div class="snapshot-countdown" id="snap-countdown">⏳ 07:13:42</div>
+          </div>
+        </div>
+
+        <div class="snapshot-price-row">
+          <span class="snapshot-price-big up" id="snap-price">1.3220</span>
+          <span class="snapshot-chg-pill up" id="snap-chg">+24.85%</span>
+        </div>
+
+        <!-- L/S Oran Çubuğu ve Kırmızı Ok ile Açılan [◫] Butonu -->
+        <div class="snapshot-sentiment-row">
+          <span class="snapshot-oi-val" id="snap-oi-num">160,988,789</span>
+          <div class="sentiment-bar-track">
+            <div class="sentiment-bar-long" id="snap-ls-fill" style="width: 65.94%;"></div>
+          </div>
+          <div class="sentiment-labels" style="min-width: 100px;">
+            <span class="ls-label-long" id="snap-ls-lbl-l">L 65.94%</span>
+            <span class="ls-label-short" id="snap-ls-lbl-s">34.06% S</span>
+          </div>
+
+          <!-- Kırmızı okla gösterilen popup tetikleyici ikonu -->
+          <button class="sentiment-modal-trigger-btn" id="sentiment-modal-trigger-btn" title="Derin Piyasa Dağılımını Göster">
+            ◫
+          </button>
+        </div>
+
+        <!-- 200 GÜNLÜK QUANT & TARİHSEL İSTATİSTİK ROZETLERİ -->
+        <div class="snapshot-200d-row" id="snap-200d-row">
+          <div class="snap-stat-chip" id="chip-ema" title="200 Günlük EMA ve Fiyat Farkı">
+            <span class="chip-lbl">EMA200</span>
+            <span class="chip-val cyan" id="snap-val-ema">—</span>
+          </div>
+          <div class="snap-stat-chip" id="chip-ath" title="200 Günlük Zirveye (ATH) Uzaklık">
+            <span class="chip-lbl">200G Zirve</span>
+            <span class="chip-val red" id="snap-val-ath">—</span>
+          </div>
+          <div class="snap-stat-chip" id="chip-atl" title="200 Günlük Dipten (ATL) Yükseliş">
+            <span class="chip-lbl">200G Dip</span>
+            <span class="chip-val green" id="snap-val-atl">—</span>
+          </div>
+          <div class="snap-stat-chip" id="chip-winrate" title="Son 200 Günde Pozitif Kapanış Oranı (Win Rate)">
+            <span class="chip-lbl">Pozitif Gün</span>
+            <span class="chip-val gold" id="snap-val-winrate">—</span>
+          </div>
+          <div class="snap-stat-chip" id="chip-streak" title="Ardışık Yeşil/Kırmızı Gün Serisi">
+            <span class="chip-lbl">Seri</span>
+            <span class="chip-val" id="snap-val-streak">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3C. ÇOKLU BOT SİNYAL İSTASYONU (HAMMER PRO / M1 PREMIUM) -->
+      <section id="bot-hub-widget">
+
+        <!-- Sol Dikey Metalik Buton Şeridi -->
+        <nav id="bot-nav-strip">
+          <button class="bot-badge-btn gold" data-bot="m1a" title="M1-A (Focused insight on the smallest timeframe)">
+            M1-A
+            <span class="bot-count-badge">279</span>
+          </button>
+          <button class="bot-badge-btn gold" data-bot="m1premium" title="M1 Premium (Momentum & Divergence)">
+            M1P
+            <span class="bot-count-badge">113</span>
+          </button>
+          <button class="bot-badge-btn cyan" data-bot="fr" title="Funding Rate Tracker">
+            FR
+            <span class="bot-count-badge">1</span>
+          </button>
+          <button class="bot-badge-btn green" data-bot="v3" title="V3-A (Real-time volume monitoring)">
+            V3
+            <span class="bot-count-badge">2</span>
+          </button>
+          <button class="bot-badge-btn hammer" data-bot="hammerpro" title="Hammer Pro (#W1 Reversal)">
+            <span style="font-size:11px;">🔨</span>
+            <span class="bot-btn-sub-label" style="font-size:6px;font-weight:800;color:#cbd5e1;">PRO</span>
+          </button>
+          <button class="bot-badge-btn proplus active" data-bot="hammerproplus" title="Hammer Pro Plus (Advanced structural pattern framework)">
+            <span style="font-size:11px;">🔨</span>
+            <span class="bot-btn-sub-label" style="font-size:6px;font-weight:900;color:#fdba74;">PRO+</span>
+          </button>
+          <button class="bot-badge-btn red" data-bot="4s" title="4S (Multi-angle view of the 4H structure)">
+            4S
+            <span class="bot-count-badge">18</span>
+          </button>
+          <button class="bot-badge-btn bronze" data-bot="4ssniper" title="4S Sniper (NW UP Structure Reversal)">
+            <span class="bot-btn-mini-title">4S</span>
+            <span class="bot-btn-sub-label">SNIPER</span>
+            <span class="bot-count-badge">12</span>
+          </button>
+          <button class="bot-badge-btn div" data-bot="div" title="Divergence (RSI Uyumsuzluk & Kesişim)">
+            DIV
+            <span class="bot-count-badge">5</span>
+          </button>
+        </nav>
+
+        <!-- Sağ Taraf: Aktif Bot Başlığı, Özet Bandı ve Sinyal Akışı -->
+        <div id="bot-content-area">
+          <div class="bot-content-header">
+            <div class="bot-title-group">
+              <div class="bot-header-icon proplus" id="bot-header-icon"><span style="font-size:11px;">🔨</span><span style="font-size:6px;font-weight:900;color:#fdba74;line-height:1;">PRO+</span></div>
+              <div class="bot-name-group">
+                <span class="bot-name-text" id="bot-header-title">Hammer Pro Plus</span>
+                <span class="bot-subtitle-text" id="bot-header-subtitle">Advanced structural pattern framework</span>
+              </div>
+            </div>
+            <div class="bot-header-tools">
+              <button class="bot-popout-btn" id="btn-popout-active-bot" title="Bu Botu 2. Ekrana / Ayrı Pencereye Ayır (Serbest Boyutlandırılabilir)">
+                ↗ 2. Ekran
+              </button>
+              <button class="bot-popout-btn secondary" id="btn-popout-all-bots" title="Tüm 9 Botu 2. Ekranda Ayrı Pencerelerde Aç">
+                ⧉ Tümünü Aç
+              </button>
+              <span class="today-pill" style="font-size:10px;font-weight:700;">SE</span>
+              <input type="text" class="bot-search-input" placeholder="Search" />
+            </div>
+          </div>
+
+          <!-- Özet Bant -->
+          <div class="bot-summary-band">
+            <div class="summary-stats" id="bot-summary-stats">
+              SRS: 1m.29 | 5m.0 ❗ | 1h.7 ❗  |  WT: 1m 🟢
+            </div>
+            <span class="today-pill">Today</span>
+          </div>
+
+          <!-- Sinyal Kartları Listesi -->
+          <div class="bot-signals-scroll" id="bot-signals-scroll">
+            <!-- JavaScript ile doldurulur -->
+          </div>
+        </div>
+
+      </section>
+
+    </aside>
+
+  </div><!-- /main-body -->
+
+  <!-- ─── 4. DERİN PİYASA DUYARLILIK POPUP MODALI ─── -->
+  <div id="sentiment-modal-backdrop">
+    <div class="sentiment-modal-box">
+      <div class="modal-header-bar">
+        <div class="modal-title-left">
+          <span>⚡</span>
+          <span id="modal-title-text">MARKET SENTIMENT & EXPOSURE</span>
+        </div>
+        <div class="modal-header-actions">
+          <button class="modal-close-btn" id="modal-close-btn">✕</button>
+        </div>
+      </div>
+
+      <!-- 1. ORDER BOOK (Bids vs Asks) -->
+      <div class="modal-metric-card">
+        <span class="modal-metric-title">ORDER BOOK</span>
+        <div class="modal-metric-bar-wrap">
+          <span class="val-bids" id="modal-val-ob-b">B 41.06%</span>
+          <div class="modal-track">
+            <div class="modal-track-fill" id="modal-bar-ob" style="width: 41.06%;"></div>
+          </div>
+          <span class="val-asks" id="modal-val-ob-s">58.94% S</span>
+        </div>
+      </div>
+
+      <!-- 2. LONG/SHORT POSITIONS (Balina Net Pozisyon) -->
+      <div class="modal-metric-card">
+        <span class="modal-metric-title">LONG/SHORT POSITIONS</span>
+        <div class="modal-metric-bar-wrap">
+          <span class="val-bids" id="modal-val-pos-l">L 67.25%</span>
+          <div class="modal-track">
+            <div class="modal-track-fill" id="modal-bar-pos" style="width: 67.25%;"></div>
+          </div>
+          <span class="val-asks" id="modal-val-pos-s">32.75% S</span>
+        </div>
+      </div>
+
+      <!-- 3. TRADER POSITIONING (Balina Hesap Sayısı) -->
+      <div class="modal-metric-card">
+        <span class="modal-metric-title">TRADER POSITIONING</span>
+        <div class="modal-metric-bar-wrap">
+          <span class="val-bids" id="modal-val-acc-l">L 34.05%</span>
+          <div class="modal-track">
+            <div class="modal-track-fill" id="modal-bar-acc" style="width: 34.05%;"></div>
+          </div>
+          <span class="val-asks" id="modal-val-acc-s">65.95% S</span>
+        </div>
+      </div>
+
+      <!-- 4. MARKET EXPOSURE (Perakende Dağılımı) -->
+      <div class="modal-metric-card">
+        <span class="modal-metric-title">MARKET EXPOSURE</span>
+        <div class="modal-metric-bar-wrap">
+          <span class="val-bids" id="modal-val-glob-l">L 37.88%</span>
+          <div class="modal-track">
+            <div class="modal-track-fill" id="modal-bar-glob" style="width: 37.88%;"></div>
+          </div>
+          <span class="val-asks" id="modal-val-glob-s">62.12% S</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 5. ALT TICKER TAPE BANT ─────────────────────────────────── -->
+  <footer id="ticker-tape-footer">
+    <div class="tape-items-scroll" id="tape-items-scroll">
+      <div class="tape-item"><span class="tape-symbol">BTWUSDT.P</span><span class="tape-price">1.3220</span><span class="tape-chg up">+24.85%</span></div>
+      <div class="tape-item"><span class="tape-symbol">QNTUSDT.P</span><span class="tape-price">261.98</span><span class="tape-chg up">+50.05%</span></div>
+      <div class="tape-item"><span class="tape-symbol">ONEUSDT.P</span><span class="tape-price">0.00271</span><span class="tape-chg up">+27.47%</span></div>
+      <div class="tape-item"><span class="tape-symbol">GRTUSDT.P</span><span class="tape-price">0.03260</span><span class="tape-chg up">+18.78%</span></div>
+      <div class="tape-item"><span class="tape-symbol">PUMPUSDT.P</span><span class="tape-price">0.00516</span><span class="tape-chg up">+15.93%</span></div>
+      <div class="tape-item"><span class="tape-symbol">SOONUSDT.P</span><span class="tape-price">0.3434</span><span class="tape-chg up">+14.81%</span></div>
+      <div class="tape-item"><span class="tape-symbol">IRYSISUSDT.P</span><span class="tape-price">0.01907</span><span class="tape-chg up">+12.51%</span></div>
+      <div class="tape-item"><span class="tape-symbol">GRASSUSDT.P</span><span class="tape-price">0.6446</span><span class="tape-chg up">+13.31%</span></div>
+      <div class="tape-item"><span class="tape-symbol">SEIUSDT.P</span><span class="tape-price">0.08142</span><span class="tape-chg up">+10.47%</span></div>
+    </div>
+    <div class="tape-clock" id="live-utc-clock">08:46:18 UTC+3</div>
+  </footer>
+
+</div><!-- /app-layout -->
+
+<script src="core/event-bus.js"></script>
+<script src="core/binance-api.js"></script>
+<script src="core/websocket.js"></script>
+<script src="core/symbol-registry.js"></script>
+<script src="core/price-formatter.js"></script>
+
+<script src="plugins/chart/multi-chart.plugin.js"></script>
+<script src="plugins/watchlist/watchlist.plugin.js"></script>
+<script src="plugins/sentiment-modal/sentiment-modal.plugin.js"></script>
+<script src="plugins/bot-hub/coin-history-modal.js"></script>
+<script src="plugins/bot-hub/bot-renderer.js"></script>
+<script src="plugins/bot-hub/bot-hub.plugin.js"></script>
+<script src="plugins/treasury-cockpit/treasury-cockpit.plugin.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Modülleri Başlat (Grafikler yerine Bot Takip ve Kasa Yönetimi Kokpiti aktif)
+  TreasuryCockpitPlugin.init('charts-viewport');
+  WatchlistPlugin.init();
+  TickerSnapshot.init();
+  BotHubPlugin.init();
+
+  // Çift Ekran Canlı Senkronizasyonu (2. Ekrandaki bot penceresinden coine tıklandığında 1. ekranı senkronize et)
+  BotRenderer.onSymbolBroadcast((symbol) => {
+    console.log('[DualMonitor] 2. Ekrandan sinyal seçildi -> 1. Ekrana kilitleniyor:', symbol);
+    WatchlistPlugin.setActiveSymbol(symbol);
+  });
+
+  // 2. Canlı Saat (UTC+3)
+  function updateClock() {
+    const now = new Date();
+    const clockEl = document.getElementById('live-utc-clock');
+    if (clockEl) {
+      clockEl.textContent = now.toLocaleTimeString('tr-TR') + ' UTC+3';
+    }
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // 3. Üst Arama Çubuğu (Coin Arama, Canlı Filtreleme & Senkronizasyon)
+  const searchInput = document.getElementById('coin-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      WatchlistPlugin.search(val);
+    });
+
+    searchInput.addEventListener('focus', () => {
+      searchInput.select();
+    });
+
+    searchInput.addEventListener('blur', () => {
+      const current = WatchlistPlugin.getActiveSymbol ? WatchlistPlugin.getActiveSymbol() : '';
+      if (current) {
+        searchInput.value = current;
+        WatchlistPlugin.search('');
+      }
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = searchInput.value.trim().toUpperCase();
+        if (val) {
+          const formatted = val.endsWith('USDT') ? val : val + 'USDT';
+          WatchlistPlugin.setActiveSymbol(formatted);
+          WatchlistPlugin.search('');
+          searchInput.blur();
+        }
+      } else if (e.key === 'Escape') {
+        const current = WatchlistPlugin.getActiveSymbol ? WatchlistPlugin.getActiveSymbol() : '';
+        searchInput.value = current;
+        WatchlistPlugin.search('');
+        searchInput.blur();
+      }
+    });
+  }
+
+  // Alt Ticker Tape Tıklama Senkronizasyonu
+  const tapeContainer = document.getElementById('tape-items-scroll');
+  if (tapeContainer) {
+    tapeContainer.addEventListener('click', (e) => {
+      const item = e.target.closest('.tape-item');
+      if (!item) return;
+      const symEl = item.querySelector('.tape-symbol');
+      if (symEl) {
+        const clean = symEl.textContent.trim().replace('.P', '');
+        WatchlistPlugin.setActiveSymbol(clean);
+      }
+    });
+  }
+
+  // 4. Grid Seçici (1x1, 2x1, 4x1)
+  const grid4 = document.getElementById('grid-4x1');
+  const grid2 = document.getElementById('grid-2x1');
+  const grid1 = document.getElementById('grid-1x1');
+  const viewport = document.getElementById('charts-viewport');
+
+  function setGrid(cols, activeBtn) {
+    [grid1, grid2, grid4].forEach(b => b && b.classList.remove('active'));
+    if (activeBtn) activeBtn.classList.add('active');
+    if (viewport) {
+      viewport.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      // Hücrelerin görünürlüğünü ayarla
+      for (let i = 0; i < 4; i++) {
+        const cell = document.getElementById(`chart-cell-${i}`);
+        if (cell) cell.style.display = i < cols ? 'flex' : 'none';
+      }
+    }
+  }
+
+  if (grid4) grid4.addEventListener('click', () => setGrid(4, grid4));
+  if (grid2) grid2.addEventListener('click', () => setGrid(2, grid2));
+  if (grid1) grid1.addEventListener('click', () => setGrid(1, grid1));
+
+  // 5. WebSocket Bağlantısını Başlat
+  if (typeof WebSocketManager !== 'undefined') {
+    WebSocketManager.connect('BTWUSDT', '1m');
+  }
+});
+</script>
+
+</body>
+</html>
