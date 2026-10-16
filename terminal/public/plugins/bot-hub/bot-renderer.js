@@ -74,7 +74,7 @@ const BotRenderer = (() => {
     'm1a': {
       id: 'm1a',
       title: 'M1-A',
-      subtitle: 'Focused insight on the smallest timeframe',
+      subtitle: 'Küçük zaman diliminde odaklı içgörü',
       iconClass: 'gold',
       iconText: 'M1-A',
       summaryStats: 'BTC Status: Normal  |  Stochastic (K/D) Tracking  |  Micro Drops',
@@ -218,6 +218,38 @@ const BotRenderer = (() => {
         try { win.focus(); } catch (_) {}
       }
     });
+  }
+
+  /**
+   * Aşırı Bölge Uyarı İkonu (Visivero & Telegram Birebir Sarı Üçgen / Ünlem)
+   */
+  function renderWarningBadge() {
+    return `<span class="val-alert" title="Aşırı Bölge Uyarısı"><svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L1 21h22L12 2zm0 3.5l8.5 14.5H3.5L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg></span>`;
+  }
+
+  function formatRsiWithAlert(rsiVal) {
+    if (rsiVal === undefined || rsiVal === null || rsiVal === '—') return '—';
+    const str = String(typeof rsiVal === 'object' ? (rsiVal.h1 || rsiVal.m1 || JSON.stringify(rsiVal)) : rsiVal);
+    const num = parseInt(str.replace(/[^\d]/g, ''), 10);
+    const hasAlert = str.includes('⚠️') || str.includes('!') || str.includes('❗') || (!isNaN(num) && (num <= 30 || num >= 70));
+    const cleanVal = !isNaN(num) ? num : str.replace(/[⚠️!❗]/g, '').trim();
+    return `${cleanVal}${hasAlert ? renderWarningBadge() : ''}`;
+  }
+
+  function formatStochWithAlert(stochVal) {
+    if (!stochVal || stochVal === '—') return '—';
+    const str = String(stochVal);
+    let hasAlert = str.includes('⚠️') || str.includes('!') || str.includes('❗');
+    const cleanStr = str.replace(/[⚠️!❗]/g, '').trim();
+    const parts = cleanStr.split('/');
+    if (parts.length === 2) {
+      const k = parseInt(parts[0], 10);
+      const d = parseInt(parts[1], 10);
+      if (!isNaN(k) && (k <= 20 || k >= 80 || (!isNaN(d) && (d <= 20 || d >= 80)))) {
+        hasAlert = true;
+      }
+    }
+    return `${cleanStr}${hasAlert ? renderWarningBadge() : ''}`;
   }
 
   /**
@@ -702,6 +734,10 @@ const BotRenderer = (() => {
         const valColor = isDrop ? 'var(--red)' : 'var(--green)';
         const label = isDrop ? 'Drop Value:' : 'Boost Value:';
 
+        const rsiDisplay = formatRsiWithAlert(s.rsi);
+        const stochDisplay = formatStochWithAlert(s.stochastic);
+        const displayTime = s.time || formatSignalDateTime(s);
+
         html += `
           <div class="signal-card" data-symbol="${s.symbol}">
             <div class="card-top-row">
@@ -729,21 +765,23 @@ const BotRenderer = (() => {
             </div>
             <div class="card-field-row">
               <span>RSI:</span>
-              <span style="font-weight: 700; color: ${typeof s.rsi === 'string' && s.rsi.includes('77') ? 'var(--gold)' : 'var(--text-main)'};">
-                ${typeof s.rsi === 'object' && s.rsi ? (s.rsi.h1 || s.rsi.m1 || JSON.stringify(s.rsi)) : (s.rsi || '—')}
+              <span class="card-field-val">
+                ${rsiDisplay}
               </span>
             </div>
             <div class="card-field-row">
               <span>Stochastic (K/D):</span>
-              <span style="font-weight: 700; color: #fff;">${s.stochastic}</span>
+              <span class="card-field-val">
+                ${stochDisplay}
+              </span>
             </div>
             <div class="card-field-row">
               <span>BTC Status:</span>
-              <span style="color: #94a3b8; font-weight: 600;">${s.btcStatus || 'Normal'}</span>
+              <span style="color: #94a3b8; font-weight: 500;">${s.btcStatus || 'Normal'}</span>
             </div>
             <div class="card-footer">
               <span class="card-link-icon" title="1. Ekranda Aç">↗ Grafikte Göster</span>
-              <span class="card-time">${formatSignalDateTime(s)}</span>
+              <span class="card-time">${displayTime}</span>
             </div>
           </div>
         `;

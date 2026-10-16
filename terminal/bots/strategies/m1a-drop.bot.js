@@ -11,7 +11,7 @@ class M1ADropBot extends BaseBot {
     super({
       id: 'm1a',
       name: 'M1-A',
-      description: 'Focused insight on the smallest timeframe'
+      description: 'Küçük zaman diliminde odaklı içgörü'
     });
   }
 
@@ -124,13 +124,22 @@ class M1ADropBot extends BaseBot {
     const valFormatted = valNum >= 0 ? `+${valNum.toFixed(2)}%` : `${valNum.toFixed(2)}%`;
     const volFormatted = volNum >= 0 ? `+${volNum.toFixed(2)}%` : `${volNum.toFixed(2)}%`;
 
-    // RSI Değerleri (Aşırı değerde ⚠️ alarmı)
+    // RSI Değerleri (Aşırı değerde ⚠️ alarmı: <= 30 veya >= 70)
     const rawRsi = parseInt(s.rsi, 10);
-    const rsiNum = !isNaN(rawRsi) ? rawRsi : (valNum < 0 ? 65 : 75);
-    const rsiFormatted = `${rsiNum}${rsiNum >= 75 || rsiNum <= 25 ? ' ⚠️' : ''}`;
+    const rsiNum = !isNaN(rawRsi) ? rawRsi : (valNum < 0 ? 30 : 75);
+    const rsiFormatted = `${rsiNum}${rsiNum >= 70 || rsiNum <= 30 ? ' ⚠️' : ''}`;
 
-    // Stochastic formatı
-    const stochFormatted = this.formatStochastic(s.stochK, s.stochD, s.stochastic);
+    // Stochastic formatı (K <= 20 veya K >= 80 ise ⚠️ alarmı)
+    let stochFormatted = this.formatStochastic(s.stochK, s.stochD, s.stochastic);
+    const stochParts = String(stochFormatted).replace(/[^\d/]/g, '').split('/');
+    if (stochParts.length === 2) {
+      const k = parseInt(stochParts[0], 10);
+      if (!isNaN(k) && (k <= 20 || k >= 80)) {
+        if (!stochFormatted.includes('⚠️')) {
+          stochFormatted = `${stochFormatted} ⚠️`;
+        }
+      }
+    }
 
     const card = {
       id: 'm1a_' + Date.now(),

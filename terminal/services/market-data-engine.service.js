@@ -334,30 +334,33 @@ class MarketDataEngine extends EventEmitter {
         const volChangePct = oldest.vol > 0 ? ((quoteVol - oldest.vol) / oldest.vol) * 100 : 0;
 
         // Anlık M1-A ve M1-Premium Radar Olayları (%100 Bağımsız Yerel Motor)
-        if (price1mChangePct <= -0.50) {
-          this.emit('radarAlert', {
-            type: 'm1a',
-            symbol: sym,
-            price: curPrice,
-            prevPrice: oldest.price,
-            priceStr: t.c,
-            dropPct: price1mChangePct,
-            volUsd: quoteVol,
-            volChangePct,
-            timestamp: now
-          });
-        } else if (price1mChangePct >= 0.50) {
-          this.emit('radarAlert', {
-            type: 'm1premium',
-            symbol: sym,
-            price: curPrice,
-            prevPrice: oldest.price,
-            priceStr: t.c,
-            boostPct: price1mChangePct,
-            volUsd: quoteVol,
-            volChangePct,
-            timestamp: now
-          });
+        // Yalnızca 24s hacmi $1M üzerinde olan ve en az %0.75 hareket eden gerçek pariteler taranır
+        if (quoteVol >= 1000000) {
+          if (price1mChangePct <= -0.75) {
+            this.emit('radarAlert', {
+              type: 'm1a',
+              symbol: sym,
+              price: curPrice,
+              prevPrice: oldest.price,
+              priceStr: t.c,
+              dropPct: price1mChangePct,
+              volUsd: quoteVol,
+              volChangePct,
+              timestamp: now
+            });
+          } else if (price1mChangePct >= 0.75) {
+            this.emit('radarAlert', {
+              type: 'm1premium',
+              symbol: sym,
+              price: curPrice,
+              prevPrice: oldest.price,
+              priceStr: t.c,
+              boostPct: price1mChangePct,
+              volUsd: quoteVol,
+              volChangePct,
+              timestamp: now
+            });
+          }
         }
 
         // V3 Hacim Radarı (Son 24 saatlik hacim > $3M ve anlık hacim sıçraması)

@@ -1,18 +1,18 @@
 {
-  "updatedAt": "2026-10-16T19:09:54.595Z",
+  "updatedAt": "2026-10-16T20:11:49.097Z",
   "coins": {
     "BTCUSDT": {
       "symbol": "BTCUSDT",
-      "latestPrice": 81532.6,
+      "latestPrice": 81423.5,
       "candleCount": 200,
       "metrics": {
-        "ema200": 72364.07,
-        "ema200DiffPct": 12.67,
+        "ema200": 72363.5245,
+        "ema200DiffPct": 12.52,
         "ema200Status": "ABOVE",
         "ath200d": 87385.1,
-        "athDistancePct": -6.7,
+        "athDistancePct": -6.82,
         "atl200d": 57758.6,
-        "atlBouncePct": 41.16,
+        "atlBouncePct": 40.97,
         "greenDays": 103,
         "redDays": 97,
         "winRatePct": 51.5,
@@ -20,9 +20,9 @@
           "count": 1,
           "type": "DOWN"
         },
-        "avgDailyRangePct": 3.03,
-        "perf7d": -1.27,
-        "perf30d": 7.03
+        "avgDailyRangePct": 3.04,
+        "perf7d": -1.4,
+        "perf30d": 6.89
       },
       "dailyReturns": [
         {
@@ -320,13 +320,13 @@
           "date": "2026-10-16",
           "open": 82195.3,
           "high": 82900.5,
-          "low": 81214.2,
-          "close": 81532.6,
-          "volume": 89986.843,
-          "changePct": -0.81
+          "low": 80780,
+          "close": 81423.5,
+          "volume": 124145.461,
+          "changePct": -0.94
         }
       ],
-      "lastSync": 1792168610171
+      "lastSync": 1792178576879
     },
     "ETHUSDT": {
       "symbol": "ETHUSDT",
@@ -984,16 +984,16 @@
     },
     "BTWUSDT": {
       "symbol": "BTWUSDT",
-      "latestPrice": 1.8904,
+      "latestPrice": 1.9576,
       "candleCount": 135,
       "metrics": {
-        "ema200": 0.451371,
-        "ema200DiffPct": 318.81,
+        "ema200": 0.451869,
+        "ema200DiffPct": 333.22,
         "ema200Status": "ABOVE",
         "ath200d": 2.7536,
-        "athDistancePct": -31.35,
+        "athDistancePct": -28.91,
         "atl200d": 0.016559,
-        "atlBouncePct": 11316.15,
+        "atlBouncePct": 11721.97,
         "greenDays": 78,
         "redDays": 57,
         "winRatePct": 57.8,
@@ -1002,8 +1002,8 @@
           "type": "UP"
         },
         "avgDailyRangePct": 36.48,
-        "perf7d": 19.93,
-        "perf30d": 152.28
+        "perf7d": 24.2,
+        "perf30d": 161.24
       },
       "dailyReturns": [
         {
@@ -1302,12 +1302,12 @@
           "open": 1.8144,
           "high": 2.089,
           "low": 1.6025,
-          "close": 1.8904,
-          "volume": 138717787,
-          "changePct": 4.19
+          "close": 1.9576,
+          "volume": 141390650,
+          "changePct": 7.89
         }
       ],
-      "lastSync": 1792177793605
+      "lastSync": 1792181508797
     },
     "SKYAIUSDT": {
       "symbol": "SKYAIUSDT",

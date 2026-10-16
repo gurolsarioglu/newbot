@@ -69,7 +69,7 @@ const BotHubPlugin = (() => {
     m1a: {
       id: 'm1a',
       title: 'M1-A',
-      subtitle: 'Focused insight on the smallest timeframe',
+      subtitle: 'Küçük zaman diliminde odaklı içgörü',
       iconClass: 'gold',
       iconText: 'M1',
       summaryStats: 'BTC Status: Normal  |  Stochastic (K/D) Tracking  |  Micro Drops',

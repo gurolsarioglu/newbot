@@ -39,7 +39,17 @@ Bu belge, Alpha Terminal üzerinde gerçekleştirilen tüm mimari kararları, ko
    - İşlem Binance üzerinde kapatıldığında arka planda otomatik olarak deftere yeni satır eklenmesi ve kasanın zincirleme güncellenmesi sağlandı.
    - Açıklama (notlar) alanına tıklanarak inline düzenleme, tek tıkla Excel/CSV indirme ve manuel işlem ekleme özellikleri tamamlandı.
 
-8. **Kesin Takip ve GitHub Kuralı:**
+8. **M1-A Drop Tespiti & Visivero Karşılaştırması, Hacim Deltası Formülü, Tipografi (Inter) ve Sarı Üçgen (⚠️) Uyarı Rozetleri:**
+   - Kullanıcı: *"birinci resim visivero dan ikinci resim bizim tersine mühendislik ile çıkardığımız iş biz neden aynı coinleri yakalayamıyoruz ? bu yazı fontu güzel ayrıca ! işareti var bizde yok."* sorusunu ve ekran görüntülerini paylaştı.
+   - **Tersine Mühendislik Analizi (İşin Sırrı Çözüldü):**
+     1. Yerel quant motorumuzun aslında `ORDERUSDT`'yi 22:40/22:41'de **birebir yakaladığı** (`signals_history.json` kaydı: Drop Value: `-2.05%`, Current Price: `0.03062`, Previous Price: `0.03126` - Visivero ile %100 özdeş) tespit edildi.
+     2. Ekranda `ORDERUSDT` yerine `AGTUSDT (-0.51%)` görülmesinin sebebi: M1-A radar eşiğinin `-0.50%` gibi aşırı gevşek olması ve 24s hacim filtresi olmaması nedeniyle, Binance Futures'taki 745+ pariteden gelen önemsiz spread dalgalanmalarının (mikro-gürültü) 1-2 dakika içinde listeyi doldurup gerçek düşüşleri aşağı itmesiydi.
+     3. Visivero'daki `Volume: -35.96%` değerinin 24 saatlik toplam hacim artışı değil; son 1m mumun hacminin bir önceki 1m muma göre çekilme yüzdesi ($Volume Delta = \frac{V_{cur} - V_{prev}}{V_{prev}} \times 100$) olduğu çözüldü.
+     4. Yazı tipinin Visivero ve Telegram'daki gibi modern sans-serif **`Inter`** tipografisine dönüştürülmesi sağlandı.
+     5. Aşırı satım ve aşırı alım bölgelerinde (`RSI <= 30` veya `RSI >= 70`, `Stochastic K <= 20` veya `K >= 80`) Visivero'daki gibi amber sarı uyarı üçgeni (`⚠️`) SVG rozetleri dinamik olarak entegre edildi.
+     6. Bot başlık alanındaki buton sıkışması giderildi, alt başlık orijinal Türkçe **"Küçük zaman diliminde odaklı içgörü"** yapıldı ve sol sayaçlar mercan kırmızısı (`#f43f5e`) bildirim haplarına dönüştürüldü.
+
+9. **Kesin Takip ve GitHub Kuralı:**
    * Kullanıcı: *"bizim bir kuralımız var yaptıklarımızı takip edebilmek için tüm işleri kayıt ediyorum birde değişiklikleri githuba gönderiyoruz. bunları da unutma lütfen"* hatırlatmasını yaptı. Yapılan tüm adımların `proje takip.md` belgesine işlenmesi ve Git commit/push ile depoda güvenceye alınması kesinleştirildi.
 
 ---
