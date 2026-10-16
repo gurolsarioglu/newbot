@@ -979,7 +979,7 @@ const TreasuryCockpitPlugin = (() => {
     refreshBotSignals();
     setInterval(() => {
       refreshBotSignals();
-    }, 15000);
+    }, 4000);
 
     console.log('[TreasuryCockpit] Stop-Losssuz Kasa & Bot Takip Kokpiti basariyla baslatildi.');
   }

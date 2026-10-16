@@ -119,11 +119,13 @@ class HammerProPlusBot extends BaseBot {
     const rsi5mNum = parseInt(s.rsi5m || (!isNaN(rawRsi) ? Math.min(rawRsi + 2, 45) : 30), 10);
     const rsi1hNum = parseInt(s.rsi1h || 35, 10);
 
-    // 1m WaveTrend Gürültü Kontrolü
-    const isQualityReversal = this.validateReversalQuality({ rsi5m: rsi5mNum, rsi1h: rsi1hNum });
-    if (!isQualityReversal) {
-      console.warn(`[HammerProPlus] ⚠️ #${symbol} sinyali 5m/1h aşırı satım teyidi olmadığı için (Whipsaw riski) elendi.`);
-      return null;
+    // 1m WaveTrend Gürültü Kontrolü (Dışarıdan gelen onaylı sinyaller hariç)
+    if (!s.rawId) {
+      const isQualityReversal = this.validateReversalQuality({ rsi5m: rsi5mNum, rsi1h: rsi1hNum });
+      if (!isQualityReversal) {
+        console.warn(`[HammerProPlus] ⚠️ #${symbol} sinyali 5m/1h aşırı satım teyidi olmadığı için (Whipsaw riski) elendi.`);
+        return null;
+      }
     }
 
     // WaveTrend Teyidi

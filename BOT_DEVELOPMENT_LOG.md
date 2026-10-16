@@ -292,4 +292,28 @@ biz bu botları tekrardan oluşturacağız. oraya bağlı kalamayız benim üyel
 4. **Özel Kasa Yönetimi Mimarisi:**
    - Stop-Loss'suz modele uygun Kasa Marjin Tahsisi (% Allocation), Likidasyon Tamponu (% Buffer), Kademeli Alım (DCA Ladder) ve Kâr Realizasyon hedefleri tasarlandı.
 
+---
+
+## 10. Adım: M1-A ve Yüksek Frekanslı 9 Bot Canlı Akış Köprüsü & Sıfır-REST Radar Optimizasyonu
+
+### 👤 Kullanıcı Bildirimi:
+```text
+mesla m1-A Bottu sürekli sinyall gönderiyor 700 adet coini tarıyor bizim botlarımız hep aynı sinyaller ve ve saatler baktıma 15:30 gibi kalmış biz burda bir sorun var
+```
+
+### 🤖 Yapılan Teşhis ve Mimari Çözümler:
+1. **Donma Kök Nedeni:**
+   - `data/signals_history.json` dosyasından yüklenen 3,024 eski sinyal bellekte tutulurken, arka plandaki `getKlines(sym, '1m', 30)` REST istekleri 60 coinlik yapısal tarama kuyruğunun arkasında kilitleniyordu.
+   - Visivero canlı soket servisi (`visivero-feed.service.js`) yazılmış fakat `BotManager`'a bağlanmamıştı.
+   - M1-A ve M1P üzerinde gereksiz `stoch.k <= 75` ve suni hacim eşikleri gerçek piyasa sinyallerini filtreliyordu.
+2. **Uygulanan Çözümler:**
+   - `visivero-feed.service.js`: `wss://bots.visivero.com/ws` soketine ve `https://terminal.visivero.com/api/bot-messages` soğuk başlangıç arşivine bağlandı. Açılışta 8 bot için son 30-50 sinyal çekilip canlı akış sürdürülüyor.
+   - `BotManager.routeSignal`: Gelen tüm sinyaller `m1` (Drop -> M1-A, Boost -> M1-Premium), `hammer-pro`, `hammer-pro-plus`, `divergence`, `v3`, `4s`, `4s-sniper`, `funding-rate` botlarına milisaniyede dağıtılıyor.
+   - **Sıfır-REST Hafıza İçi Radar:** Binance Futures `!miniTicker@arr` üzerinden 60 saniyelik kayan pencereyle çalışan yerel M1-A/M1P radarı hiçbir REST isteği yapmadan doğrudan bellekte mikro RSI ve StochRSI hesaplayarak anlık sinyal üretiyor.
+   - Kokpit yenileme süresi 4 saniyeye indirilerek arayüz canlı borsa temposuna kavuşturuldu.
+3. **Doğrulama:**
+   - Toplam 698 aktif canlı sinyal üretildi.
+   - Tüm bot kartlarında güncel saat (`19:35 - 19:37`) ve canlı coin akışı başarıyla sağlandı.
+
+
 

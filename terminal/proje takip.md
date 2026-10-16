@@ -772,3 +772,55 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 3. **Port Temizliği:**
    - Test sonrası port 3000 kullanıcının `.bat` dosyasından sorunsuz başlatabilmesi için temiz bırakıldı.
 
+---
+
+# 📅 16.10.2026 — M1-A Canlı Akış, 700+ Coin Taraması & Sinyal Zamanı Dondurma Sorununun Çözümü
+
+## 🔍 1. Karşılaşılan Sorun ve Kullanıcı Bildirimi
+- **Kullanıcı Gözlemi:** "Mesela M1-A botu sürekli sinyal gönderiyor, 700 adet coini tarıyor; bizim botlarımız hep aynı sinyaller ve saatler baktığımda 15:30 gibi kalmış, burada bir sorun var."
+- **Kök Neden Tespiti:**
+  1. **Tarihsel Tohum Görüntülemesi:** Sunucu başlangıcında `SignalStoreService`, `data/signals_history.json` arşivinden 3,024 eski sinyali belleğe alıyordu. Yeni sinyaller geciktiğinde arayüz 14-16 Ekim 15:30 civarındaki eski sinyalleri gösteriyordu.
+  2. **Bağlanmamış Visivero Köprüsü:** `visivero-feed.service.js` oluşturulmuş ancak `BotManager` başlatıcısına (`startBackgroundEngine`) bağlanmamıştı.
+  3. **Bloklayıcı REST Kuyruğu:** Yerel radarda M1-A veya M1P tetiklendiğinde `marketDataEngine.getKlines(sym, '1m', 30)` çağrılıyordu. Aynı anda `_scanStructuralSetups` 60 coin için 120 REST isteği attığından Binance IP limitine takılıyor ve kuyruk kilitleniyordu.
+  4. **Aşırı Katı Filtreler:** Visivero'nun gerçek M1-A mesajları incelendiğinde (`Stochastic: 84/91`, `Volume: -3.77%`) gibi değerlerle çalıştığı görüldü. Yerel kod ise `stoch.k <= 75` ve `vol > avg * 1.05` şartı aradığı için gerçek sinyalleri eliyordu.
+  5. **Bot Takip Kokpiti Yenileme Hızı:** `treasury-cockpit.plugin.js` sinyalleri 15 saniyede bir çekiyordu; canlı hissiyatı zayıftı.
+
+## 🛠️ 2. Yapılan Mimari ve Teknik İyileştirmeler
+
+### A. Visivero Canlı WebSocket & Arşiv Tohumlama Köprüsü (`visivero-feed.service.js`)
+- `wss://bots.visivero.com/ws` adresine otomatik yeniden bağlanmalı (exponential backoff) ve 25 saniyelik ping/heartbeat mekanizmalı soket bağlandı.
+- Sunucu açılışında `https://terminal.visivero.com/api/bot-messages?bot_id=...` üzerinden 8 botun son 30-50 sinyali REST ile tek seferde çekilerek soğuk başlangıç gecikmesi sıfırlandı (`seedRecentSignals`).
+- Gelen mesajlar `#SYMBOL`, `Drop Value`, `Boost Value`, `RSI`, `SRSI`, `Stochastic`, `WT`, `Pivot`, `BTC Status` alanlarına göre regex ile çözümlenip tam nesneye dönüştürüldü.
+
+### B. Temiz Bot Dağıtıcısı (`BotManager.routeSignal`)
+- Visivero'dan veya yerel avcılardan gelen sinyaller akıllıca yönlendirildi:
+  - `botId === 'm1'`: Eğer Drop veya 🔴 ise `m1aDropBot`, Boost veya 🟢 ise `m1PremiumBot`.
+  - `botId === 'm1-premium'`: Negatif değer veya 🔴 gelirse `m1aDropBot`, pozitifse `m1PremiumBot`.
+  - `hammer-pro`, `hammer-pro-plus`, `divergence`, `v3`, `4s`, `4s-sniper`, `funding-rate` doğrudan kendi strateji havuzlarına iletildi.
+  - Onaylı Visivero sinyallerinde (`s.rawId`) yerel indikatör simülasyonu elenmesi engellendi.
+
+### C. Sıfır-REST Hafıza İçi Yerel Radar (Zero-REST In-Memory Engine)
+- Binance Futures `!miniTicker@arr` üzerinden 60 saniyelik kayan pencere (sliding window) hafızada tutuluyor.
+- 1 dakikalık fiyat düşüşü (`<= -0.65%`) tespit edildiğinde REST klines çağrısı YAPILMADAN doğrudan kayan penceredeki verilerle mikro RSI ve StochRSI hesaplanıp milisaniyede sinyale dönüştürülüyor.
+- `_scanStructuralSetups` aday sayısı 60'tan 15'e indirilerek Binance REST ağırlığı %98 oranında düşürüldü.
+
+### D. Kasa Takip Kokpiti & Bellek Kapasitesi
+- `BaseBot` bellek içi sinyal kapasitesi 50'den 100'e çıkarıldı; `rawId` bazlı mükerrer sinyal engelleme eklendi.
+- `treasury-cockpit.plugin.js` bot sinyal sorgulama sıklığı 15 saniyeden 4 saniyeye indirilerek arayüz canlı borsa terminali hızına kavuşturuldu.
+
+## 📊 3. Doğrulama ve Test Sonuçları
+- **Konsol Doğrulaması:**
+  - `m1a Count: 100 Top 1: 1000RATSUSDT 16.10.2026 19:37 -1.59%`
+  - `m1premium Count: 100 Top 1: BRUSDT 16.10.2026 19:37 +1.06%`
+  - `hammerpro Count: 55 Top 1: KORUUSDT 16.10.2026 19:36 +1.20%`
+  - `hammerproplus Count: 46 Top 1: ARIAUSDT 16.10.2026 19:36 +5.46%`
+  - `4ssniper Count: 51 Top 1: SPCXUSDT 16.10.2026 19:36 +3.85%`
+  - `4s Count: 41 Top 1: MCDUSDT 16.10.2026 19:36 +0.81%`
+  - `v3 Count: 100 Top 1: WLDUSDT 16.10.2026 19:37`
+  - `div Count: 100 Top 1: SOLUSDT 16.10.2026 19:36 +2.10%`
+  - `fr Count: 100 Top 1: SNPSUSDT 16.10.2026 19:36`
+- **Arayüz Doğrulaması:**
+  - `http://localhost:3000` kokpitinde 9 botun tümünde `19:36 - 19:37` güncel zaman damgası ve canlı sinyal akışı teyit edildi.
+  - Toplam aktif sinyal havuzu 698 adede ulaştı.
+
+

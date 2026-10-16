@@ -323,8 +323,12 @@ class MarketDataEngine extends EventEmitter {
       // 1 Dakikalık değişim analizi (Aşama 1 Radarı)
       if (sw.length >= 2) {
         const oldest = sw[0];
+        const elapsed = now - oldest.ts;
+        if (elapsed < 10000) continue; // En az 10 saniyelik veri penceresi
+
         const price1mChangePct = ((curPrice - oldest.price) / oldest.price) * 100;
         const vol1mChange = quoteVol - oldest.vol;
+        const volChangePct = oldest.vol > 0 ? ((quoteVol - oldest.vol) / oldest.vol) * 100 : 0;
 
         // Anlık M1-A ve M1-Premium Radar Olayları (Kalibre edilmiş gerçekçi eşikler)
         if (price1mChangePct <= -0.65) {
@@ -332,9 +336,11 @@ class MarketDataEngine extends EventEmitter {
             type: 'm1a',
             symbol: sym,
             price: curPrice,
+            prevPrice: oldest.price,
             priceStr: t.c,
             dropPct: price1mChangePct,
             volUsd: quoteVol,
+            volChangePct,
             timestamp: now
           });
         } else if (price1mChangePct >= 0.70) {
@@ -342,9 +348,11 @@ class MarketDataEngine extends EventEmitter {
             type: 'm1premium',
             symbol: sym,
             price: curPrice,
+            prevPrice: oldest.price,
             priceStr: t.c,
             boostPct: price1mChangePct,
             volUsd: quoteVol,
+            volChangePct,
             timestamp: now
           });
         }

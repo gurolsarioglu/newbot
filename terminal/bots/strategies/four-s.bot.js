@@ -61,14 +61,14 @@ class FourSBot extends BaseBot {
    * - '🟢': Sağlıklı Trend / Güçlü Balina Desteğiyle Sürdürülebilir Ralli
    */
   evaluate4HStructure({ rsi1d, rsi4h, srsi1d, srsi4h, srsi1h, traderRatio, exposureRatio, boostNum, explicitDot }) {
-    // 1. Boost Filtresi: 4H Yapı için en az +5.00% sıçrama aranır
-    if (boostNum < 5.00) {
-      return { valid: false, reason: `Boost (${boostNum.toFixed(2)}%) 4H ana yapı için yetersiz (Min +%5.00 olmalı).` };
-    }
-
-    // Açıkça belirtilmiş bir yön varsa (örn: sinyal verisindeki dot)
+    // Açıkça belirtilmiş bir yön varsa (örn: sinyal verisindeki dot veya Visivero feed'i)
     if (explicitDot && (explicitDot === '🔴' || explicitDot === '🟢')) {
       return { valid: true, dot: explicitDot };
+    }
+
+    // 1. Boost Filtresi: 4H Yapı için en az +1.50% sıçrama aranır
+    if (boostNum < 1.50) {
+      return { valid: false, reason: `Boost (${boostNum.toFixed(2)}%) 4H ana yapı için yetersiz (Min +%1.50 olmalı).` };
     }
 
     // 2. 🔴 Sahte Pump / Aşırı Alım Tepe Tuzağı Koşulları:

@@ -16,7 +16,7 @@ class BaseBot {
     this.id = (options.id || 'base_bot').toLowerCase();
     this.name = options.name || 'Base Bot';
     this.description = options.description || '';
-    this.maxSignals = options.maxSignals || 50;
+    this.maxSignals = options.maxSignals || 100;
 
     // Tekilleştirme ve Cooldown Takipçileri
     this.lastEmitMap = new Map(); // symbol -> timestamp
@@ -88,13 +88,13 @@ class BaseBot {
     const tf = signal.timeframe || '';
     const candleTime = signal.candleOpenTime || null;
 
-    // Mum Bazlı Tekilleştirme Kontrolü
-    if (candleTime) {
-      const candleKey = `${this.id}_${sym}_${tf}_${candleTime}`;
-      if (this.seenCandles.has(candleKey)) {
+    // Mum Bazlı veya Mesaj Kimliği Bazlı Tekilleştirme Kontrolü
+    const signalKey = signal.rawId ? `${this.id}_raw_${signal.rawId}` : (candleTime ? `${this.id}_${sym}_${tf}_${candleTime}` : null);
+    if (signalKey) {
+      if (this.seenCandles.has(signalKey)) {
         return null; // Mükerrer sinyal reddedildi
       }
-      this.seenCandles.add(candleKey);
+      this.seenCandles.add(signalKey);
 
       // Bellek koruması (Maksimum 5000 anahtar)
       if (this.seenCandles.size > 5000) {

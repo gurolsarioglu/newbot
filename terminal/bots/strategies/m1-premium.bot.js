@@ -32,14 +32,18 @@ class M1PremiumBot extends BaseBot {
    * 2. 1m RSI >= 60 veya 1m SRSI >= 75 olmalıdır (Güçlü alıcı / momentum)
    * 3. Yıldız (⭐ / isFavorite): Boost >= +1.50% ve (RSI >= 68 veya Divergence veya SRSI >= 95)
    */
-  evaluateM1Premium({ boostNum, rsi1m, srsi1m, divergence, explicitFav }) {
-    // Breakout eşik kontrolü: En az %0.80 ani sıçrama
-    if (boostNum < 0.80) {
-      return { valid: false, reason: `Boost (${boostNum.toFixed(2)}%) 1m breakout ivmesi için yetersiz (Min +%0.80 olmalı).` };
+  evaluateM1Premium({ boostNum, rsi1m, srsi1m, divergence, explicitFav, isRawExternal }) {
+    if (isRawExternal && boostNum > 0) {
+      return { valid: true, isFavorite: boostNum >= 1.50 };
+    }
+
+    // Breakout eşik kontrolü: En az %0.65 ani sıçrama
+    if (boostNum < 0.65) {
+      return { valid: false, reason: `Boost (${boostNum.toFixed(2)}%) 1m breakout ivmesi için yetersiz (Min +%0.65 olmalı).` };
     }
 
     // Momentum teyidi: 1m RSI veya SRSI canlı olmalı
-    if (rsi1m < 60 && srsi1m < 75) {
+    if (rsi1m < 50 && srsi1m < 60) {
       return { valid: false, reason: `1m RSI (${rsi1m}) ve 1m SRSI (${srsi1m}) momentum bölgesinde değil.` };
     }
 
@@ -84,7 +88,8 @@ class M1PremiumBot extends BaseBot {
       rsi1m: rsi1mNum,
       srsi1m: srsi1mNum,
       divergence: hasDiv,
-      explicitFav
+      explicitFav,
+      isRawExternal: Boolean(s.rawId)
     });
 
     if (!analysis.valid) {

@@ -95,18 +95,20 @@ class HammerProBot extends BaseBot {
     const hasWT = Boolean(s.wt || s.stochK < 20 || rsi1mNum <= 30);
     const wtDisplay = s.wt || (hasWT ? '1m 🟢' : '—');
 
-    // Trader & Mantık Doğrulama Filtresi
-    const validation = this.validateReversalQuality({
-      rsi1m: rsi1mNum,
-      rsi5m: rsi5mNum,
-      rsi1h: rsi1hNum,
-      boostNum,
-      hasWT
-    });
+    // Trader & Mantık Doğrulama Filtresi (Dışarıdan gelen onaylı sinyaller hariç)
+    if (!s.rawId) {
+      const validation = this.validateReversalQuality({
+        rsi1m: rsi1mNum,
+        rsi5m: rsi5mNum,
+        rsi1h: rsi1hNum,
+        boostNum,
+        hasWT
+      });
 
-    if (!validation.valid) {
-      console.warn(`[HammerPro] ⚠️ #${symbol} sinyali elendi: ${validation.reason}`);
-      return null;
+      if (!validation.valid) {
+        console.warn(`[HammerPro] ⚠️ #${symbol} sinyali elendi: ${validation.reason}`);
+        return null;
+      }
     }
 
     // Pivot Mesafesi Kontrolü
