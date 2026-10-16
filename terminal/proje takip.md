@@ -31,7 +31,15 @@ Bu belge, Alpha Terminal üzerinde gerçekleştirilen tüm mimari kararları, ko
    - Kasa Kokpitinde yer alan "9 Quant Botu Canlı Takip Matrisi" (3x3 grid) bölümü tamamen kaldırıldı.
    - Tüm terminal ve kokpit genelinde `Inter` (UI/etiketler/başlıklar) ve `JetBrains Mono` (fiyatlar/PnL/yüzdeler/metrikler) font sistemi devreye alındı; font boyutları 8px-9px'den 11px-13.5px seviyesine çekilerek kontrast ve okunabilirlik maksimize edildi.
 
-6. **Kesin Takip ve GitHub Kuralı:**
+
+7. **Excel Tarzı Kasa Defteri & Binance Vadeli Sadece-Okuma (Read-Only) API Entegrasyonu:**
+   - Kullanıcı: *"kendim excelde tuttuğum kasa defterini paylaşıyorum buna benzer bir şey yapalım basit sade şık buradaki işlem bilgilerini kendi binance hesabım var burada bir api ile işleme girdiğim coinleri bulup ekleyebilir miyiz işlemi kapatınca da direkt kendi gitsin okusun. sadece okuma özelliğini aktif etsek bize yeterli."* talebini iletti.
+   - Kullanıcının 30 satırlık gerçek Excel kasa defteri (`BAS`, `LIGHT`, `ENSO`, `MYRO`, `MAVIA`, `AVA`...) `terminal/data/treasury_ledger.json` altına aktarıldı.
+   - `terminal/services/binance-account.service.js` servisi ile sadece okuma (`Can Read`) yetkili Binance Futures entegrasyonu kodlandı; `/fapi/v2/positionRisk` (açık pozisyonlar) ve `/fapi/v1/income?incomeType=REALIZED_PNL` (kapanan işlem kâr/zararı) uç noktalarına bağlandı.
+   - İşlem Binance üzerinde kapatıldığında arka planda otomatik olarak deftere yeni satır eklenmesi ve kasanın zincirleme güncellenmesi sağlandı.
+   - Açıklama (notlar) alanına tıklanarak inline düzenleme, tek tıkla Excel/CSV indirme ve manuel işlem ekleme özellikleri tamamlandı.
+
+8. **Kesin Takip ve GitHub Kuralı:**
    * Kullanıcı: *"bizim bir kuralımız var yaptıklarımızı takip edebilmek için tüm işleri kayıt ediyorum birde değişiklikleri githuba gönderiyoruz. bunları da unutma lütfen"* hatırlatmasını yaptı. Yapılan tüm adımların `proje takip.md` belgesine işlenmesi ve Git commit/push ile depoda güvenceye alınması kesinleştirildi.
 
 ---

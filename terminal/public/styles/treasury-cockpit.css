@@ -839,3 +839,395 @@
   font-size: 16px;
   cursor: pointer;
 }
+
+/* ─── KASA DEFTERİ & EXCEL GÜNLÜĞÜ BÖLÜMÜ ───────────────────────────── */
+.ledger-view-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Excel İmza ve İstatistik Bandı */
+.ledger-signature-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ledger-sig-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ledger-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.ledger-main-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Inter', sans-serif;
+}
+
+.ledger-sub-title {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  font-family: 'Inter', sans-serif;
+}
+
+.ledger-sig-metrics {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ledger-stat-chip {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 5px 10px;
+  display: flex;
+  flex-direction: column;
+  min-width: 80px;
+}
+
+.ledger-stat-chip.highlight-green-box {
+  background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+  border: 1px solid #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+  color: #ffffff;
+}
+
+.ledger-stat-lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+  font-family: 'Inter', sans-serif;
+}
+
+.ledger-stat-chip.highlight-green-box .ledger-stat-lbl {
+  color: #dcfce7;
+}
+
+.ledger-stat-val {
+  font-size: 14px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: #ffffff;
+}
+
+.ledger-stat-chip.highlight-green-box .ledger-stat-val {
+  color: #ffffff;
+  font-size: 16px;
+}
+
+/* Sekmeler ve Eylem Çubuğu */
+.ledger-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ledger-tabs-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ledger-tab-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.ledger-tab-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ledger-tab-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.ledger-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ledger-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.ledger-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.ledger-btn.primary {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.35) 100%);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+}
+
+.ledger-btn.primary:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.4) 0%, rgba(5, 150, 105, 0.5) 100%);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.ledger-btn.api-btn.connected {
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+/* Excel Defter Tablosu */
+.ledger-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(17, 22, 29, 0.95) 0%, rgba(11, 15, 20, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+.ledger-table thead th {
+  background: #11161f;
+  color: #94a3b8;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Excel Stili Vurgulu Başlıklar */
+.ledger-table thead th.th-excel-green {
+  background: linear-gradient(180deg, #1b4d3e 0%, #13392e 100%);
+  color: #a7f3d0;
+  border-bottom: 2px solid #10b981;
+}
+
+.ledger-table thead th.th-excel-soft {
+  background: #16202c;
+  color: #38bdf8;
+}
+
+.ledger-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.12s ease;
+}
+
+.ledger-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ledger-table tbody tr.row-initial {
+  background: rgba(245, 158, 11, 0.05);
+  font-style: italic;
+}
+
+.ledger-table td {
+  padding: 8px 12px;
+  color: #f1f5f9;
+  white-space: nowrap;
+}
+
+/* Hücre Elemanları */
+.ledger-coin-badge {
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ledger-coin-badge:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
+.pos-pill-l {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  display: inline-block;
+  text-align: center;
+  min-width: 20px;
+}
+
+.pos-pill-s {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  display: inline-block;
+  text-align: center;
+  min-width: 20px;
+}
+
+.profit-green {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.profit-red {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.kasa-cell {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.pct-pill-green {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.pct-pill-red {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ledger-note-cell {
+  color: #cbd5e1;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.ledger-note-cell:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.ledger-note-input {
+  width: 100%;
+  background: #000;
+  border: 1px solid #38bdf8;
+  color: #fff;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+}
+
+.ledger-action-mini-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.ledger-action-mini-btn:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* Canlı Binance Pozisyonlar Bandı */
+.binance-open-pos-strip {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 189, 248, 0.12) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: 'Inter', sans-serif;
+}

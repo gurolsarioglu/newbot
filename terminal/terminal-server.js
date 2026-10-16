@@ -50,6 +50,8 @@ function fetchJson(url) {
 }
 
 const symbolRegistryService = require('./services/symbol-registry.service');
+const ledgerService = require('./services/treasury-ledger.service');
+const binanceAccountService = require('./services/binance-account.service');
 
 // SymbolRegistry Başlat
 symbolRegistryService.init();
@@ -234,6 +236,82 @@ app.post('/api/favorites/sync', async (req, res) => {
   } catch (err) {
     console.error('[Favorites Sync Error]:', err.message);
     res.status(500).json({ error: 'Senkronizasyon hatasi' });
+  }
+});
+
+// ─── Kasa Defteri (Trading Ledger & Journal) API ───────────────
+app.get('/api/ledger/trades', (req, res) => {
+  res.json(ledgerService.getAll());
+});
+
+app.post('/api/ledger/trades', (req, res) => {
+  try {
+    const trade = ledgerService.addTrade(req.body);
+    res.json({ success: true, trade, stats: ledgerService.getStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/ledger/trades/:id', (req, res) => {
+  try {
+    const trade = ledgerService.updateTrade(req.params.id, req.body);
+    if (!trade) return res.status(404).json({ success: false, error: 'Islem bulunamadi' });
+    res.json({ success: true, trade, stats: ledgerService.getStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/ledger/trades/:id', (req, res) => {
+  try {
+    const ok = ledgerService.deleteTrade(req.params.id);
+    res.json({ success: ok, stats: ledgerService.getStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ledger/initial-capital', (req, res) => {
+  const { capital } = req.body;
+  const ok = ledgerService.setInitialCapital(capital);
+  res.json({ success: ok, stats: ledgerService.getStats() });
+});
+
+app.post('/api/ledger/reset-default', (req, res) => {
+  res.json(ledgerService.resetToDefault());
+});
+
+// ─── Binance Sadece Okuma (Read-Only) API ───────────────────────
+app.get('/api/binance-read/status', (req, res) => {
+  res.json(binanceAccountService.getStatus());
+});
+
+app.post('/api/binance-read/config', async (req, res) => {
+  try {
+    const { apiKey, apiSecret, autoSync } = req.body;
+    const testResult = await binanceAccountService.setCredentials(apiKey, apiSecret, autoSync);
+    res.json({ success: testResult.success, testResult, status: binanceAccountService.getStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/binance-read/sync', async (req, res) => {
+  try {
+    const syncRes = await binanceAccountService.syncClosedTradesToLedger();
+    res.json({ success: true, syncRes, ledger: ledgerService.getAll() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/binance-read/positions', async (req, res) => {
+  try {
+    const positions = await binanceAccountService.getOpenPositions();
+    res.json({ success: true, positions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
