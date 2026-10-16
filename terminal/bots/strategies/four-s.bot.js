@@ -61,7 +61,7 @@ class FourSBot extends BaseBot {
    * - '🟢': Sağlıklı Trend / Güçlü Balina Desteğiyle Sürdürülebilir Ralli
    */
   evaluate4HStructure({ rsi1d, rsi4h, srsi1d, srsi4h, srsi1h, traderRatio, exposureRatio, boostNum, explicitDot }) {
-    // Açıkça belirtilmiş bir yön varsa (örn: sinyal verisindeki dot veya Visivero feed'i)
+    // Açıkça belirtilmiş bir yön varsa (örn: sinyal verisindeki dot veya avcı botu)
     if (explicitDot && (explicitDot === '🔴' || explicitDot === '🟢')) {
       return { valid: true, dot: explicitDot };
     }

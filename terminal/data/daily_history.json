@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-16T16:36:50.510Z",
+  "updatedAt": "2026-10-16T17:07:54.533Z",
   "coins": {
     "BTCUSDT": {
       "symbol": "BTCUSDT",
@@ -984,16 +984,16 @@
     },
     "BTWUSDT": {
       "symbol": "BTWUSDT",
-      "latestPrice": 1.9454,
+      "latestPrice": 1.839,
       "candleCount": 135,
       "metrics": {
-        "ema200": 0.451778,
-        "ema200DiffPct": 330.61,
+        "ema200": 0.45099,
+        "ema200DiffPct": 307.77,
         "ema200Status": "ABOVE",
         "ath200d": 2.7536,
-        "athDistancePct": -29.35,
+        "athDistancePct": -33.21,
         "atl200d": 0.016559,
-        "atlBouncePct": 11648.29,
+        "atlBouncePct": 11005.74,
         "greenDays": 78,
         "redDays": 57,
         "winRatePct": 57.8,
@@ -1002,8 +1002,8 @@
           "type": "UP"
         },
         "avgDailyRangePct": 36.48,
-        "perf7d": 23.42,
-        "perf30d": 159.62
+        "perf7d": 16.67,
+        "perf30d": 145.42
       },
       "dailyReturns": [
         {
@@ -1302,12 +1302,12 @@
           "open": 1.8144,
           "high": 2.089,
           "low": 1.6025,
-          "close": 1.9454,
-          "volume": 119452093,
-          "changePct": 7.22
+          "close": 1.839,
+          "volume": 133321322,
+          "changePct": 1.36
         }
       ],
-      "lastSync": 1792166784145
+      "lastSync": 1792170474109
     },
     "SKYAIUSDT": {
       "symbol": "SKYAIUSDT",

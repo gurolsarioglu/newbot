@@ -195,6 +195,7 @@ class MarketDataEngine extends EventEmitter {
           h: d.highPrice,
           l: d.lowPrice,
           q: d.quoteVolume,
+          P: d.priceChangePercent,
           E: d.closeTime
         }));
         this._handleMiniTickers(tickers);
@@ -293,6 +294,7 @@ class MarketDataEngine extends EventEmitter {
       const highPrice = parseFloat(t.h);
       const lowPrice = parseFloat(t.l);
       const quoteVol = parseFloat(t.q); // USDT Hacmi
+      const chg24Pct = t.P !== undefined ? parseFloat(t.P) : ((curPrice - openPrice) / (openPrice || 1) * 100);
 
       this.tickerMap.set(sym, {
         symbol: sym,
@@ -301,6 +303,7 @@ class MarketDataEngine extends EventEmitter {
         open24h: openPrice,
         high24h: highPrice,
         low24h: lowPrice,
+        chg24Pct,
         volUsd: quoteVol,
         eventTime: t.E || now
       });
@@ -324,14 +327,14 @@ class MarketDataEngine extends EventEmitter {
       if (sw.length >= 2) {
         const oldest = sw[0];
         const elapsed = now - oldest.ts;
-        if (elapsed < 10000) continue; // En az 10 saniyelik veri penceresi
+        if (elapsed < 6000) continue; // En az 6 saniyelik veri penceresi
 
         const price1mChangePct = ((curPrice - oldest.price) / oldest.price) * 100;
         const vol1mChange = quoteVol - oldest.vol;
         const volChangePct = oldest.vol > 0 ? ((quoteVol - oldest.vol) / oldest.vol) * 100 : 0;
 
-        // Anlık M1-A ve M1-Premium Radar Olayları (Kalibre edilmiş gerçekçi eşikler)
-        if (price1mChangePct <= -0.65) {
+        // Anlık M1-A ve M1-Premium Radar Olayları (%100 Bağımsız Yerel Motor)
+        if (price1mChangePct <= -0.50) {
           this.emit('radarAlert', {
             type: 'm1a',
             symbol: sym,
@@ -343,7 +346,7 @@ class MarketDataEngine extends EventEmitter {
             volChangePct,
             timestamp: now
           });
-        } else if (price1mChangePct >= 0.70) {
+        } else if (price1mChangePct >= 0.50) {
           this.emit('radarAlert', {
             type: 'm1premium',
             symbol: sym,
@@ -357,8 +360,8 @@ class MarketDataEngine extends EventEmitter {
           });
         }
 
-        // V3 Hacim Radarı (Son 24 saatlik hacim > $5M ve anlık hacim sıçraması)
-        if (quoteVol > 5000000 && vol1mChange > 100000) {
+        // V3 Hacim Radarı (Son 24 saatlik hacim > $3M ve anlık hacim sıçraması)
+        if (quoteVol > 3000000 && vol1mChange > 80000) {
           this.emit('radarAlert', {
             type: 'v3',
             symbol: sym,
