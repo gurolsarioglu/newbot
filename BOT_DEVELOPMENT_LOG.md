@@ -271,3 +271,25 @@ Market Exposure: 69.38% 🔴
    - `hunter-4spro.js`: 4h periyotlu oranlar çekilerek konsol, Telegram ve dashboard'a eklendi.
    - `frontend/js/dashboard.js`: Sinyal kartlarında ilgili metriklerin gösterimi sağlandı.
 
+---
+
+## 9. Adım: Visivero Tersine Mühendislik Analizi, Bağımsız Yerel Quant Bot Motoru ve Kasa Yönetimi Dönüşümü
+
+### 👤 Kullanıcı Talebi:
+```text
+biz bu botları tekrardan oluşturacağız. oraya bağlı kalamayız benim üyeliğim bittiğinde ne yapacağız kendi ayaklarımızın üzerinde durmayı öğrenmeliyiz. botların nasıl çalıştığı ile ilgili bir kodlama ve matematiksel formül işin sırrını çözmek lazım.
+```
+
+### 🤖 Yapılan İşlemler & Deşifre Edilen Formüller:
+1. **Visivero Ağ ve WebSocket Analizi:**
+   - Gizli bot soket sunucusu (`wss://bots.visivero.com/ws`) ve geçmiş sinyal API'si (`/api/bot-messages`) deşifre edildi.
+2. **Orijinal İndikatör Şablonları (Python / PineScript):**
+   - `visivero-wt-cross`: LazyBear WaveTrend WT(10,21) formülü çıkarıldı.
+   - `visivero-5in1`: Nadaraya-Watson, Mavilim, PMax ve Pivot Lookback Divergence çıkarıldı.
+   - `visivero-tc-buy-sell`: Reversal Bands ($SMA(20) \pm [3,4,5,6] \times ATR(14)$) ve 10 zaman dilimli Trend Matrisi çıkarıldı.
+3. **Tam Bağımsızlık Hedefi:**
+   - Harici sunucuya veya üyeliğe sıfır bağımlılık ile yerel `MarketDataEngine` + `QuantIndicatorsService` üzerinden doğrudan Binance Futures WebSocket akışlarıyla kendi sinyallerimizi üretme kararı alındı.
+4. **Özel Kasa Yönetimi Mimarisi:**
+   - Stop-Loss'suz modele uygun Kasa Marjin Tahsisi (% Allocation), Likidasyon Tamponu (% Buffer), Kademeli Alım (DCA Ladder) ve Kâr Realizasyon hedefleri tasarlandı.
+
+

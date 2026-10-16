@@ -5,12 +5,70 @@ Bu belge, Alpha Terminal üzerinde gerçekleştirilen tüm mimari kararları, ko
 ---
 
 ## 📑 Kronolojik İçindekiler
-1. [📅 14.10.2026 — Quant Mimari Dönüşüm, SymbolRegistry, İki Aşamalı Veri Hunisi, 250 Mumluk RingBuffer ve Sıfır Sahte Sinyal](#-14102026)
-2. [📅 13.10.2026 — Gerçekçi Tam Test Süiti (36 Test), Kökten Fiyat Hassasiyeti (0.004890 / 0.00001850 / 0.17890) ve Test Metodolojisi](#-13102026)
-3. [📅 07.10.2026 — 7/24 Kesintisiz Arka Plan, 60 Günlük Kalıcı Sinyal Arşivi, Hassas Fiyat Formatı (0.004890) ve #coin Geçmişi](#-07102026)
-4. [📅 05.10.2026 — MVC Katmanlı Mikro-Bot Mimarisi, 9 Bot Modülerliği ve Hata Düzeltmeleri](#-05102026)
-5. [📅 28.09.2026 — Multi-Bot İstasyonu, Canlı Kripto Senkronizasyonu, /api/signals/emit Entegrasyonu ve Watchlist WebSocket](#-28092026)
-6. [📅 25.09.2026 — Akıllı Türev Terminali Temeli, TradingView Lightweight Charts, Akıllı Para Kokpiti ve 15 Regresyon Testi](#-25092026)
+1. [📅 16.10.2026 — Visivero Mimarisi Tersine Mühendislik Analizi, 10 Orijinal İndikatör Formülü ve %100 Bağımsız Yerel Quant & Kasa Kokpiti](#-16102026)
+2. [📅 14.10.2026 — Quant Mimari Dönüşüm, SymbolRegistry, İki Aşamalı Veri Hunisi, 250 Mumluk RingBuffer ve Sıfır Sahte Sinyal](#-14102026)
+3. [📅 13.10.2026 — Gerçekçi Tam Test Süiti (36 Test), Kökten Fiyat Hassasiyeti (0.004890 / 0.00001850 / 0.17890) ve Test Metodolojisi](#-13102026)
+4. [📅 07.10.2026 — 7/24 Kesintisiz Arka Plan, 60 Günlük Kalıcı Sinyal Arşivi, Hassas Fiyat Formatı (0.004890) ve #coin Geçmişi](#-07102026)
+5. [📅 05.10.2026 — MVC Katmanlı Mikro-Bot Mimarisi, 9 Bot Modülerliği ve Hata Düzeltmeleri](#-05102026)
+6. [📅 28.09.2026 — Multi-Bot İstasyonu, Canlı Kripto Senkronizasyonu, /api/signals/emit Entegrasyonu ve Watchlist WebSocket](#-28092026)
+7. [📅 25.09.2026 — Akıllı Türev Terminali Temeli, TradingView Lightweight Charts, Akıllı Para Kokpiti ve 15 Regresyon Testi](#-25092026)
+
+---
+
+# 📅 16.10.2026 — Visivero Mimarisi Tersine Mühendislik Analizi, 10 Orijinal İndikatör Formülü ve %100 Bağımsız Yerel Quant & Kasa Kokpiti
+
+## 💬 1. Konuşmalarımız ve Onaylananlar (Kullanıcı Talepleri & Kararlar)
+1. **GitHub'dan Projenin İndirilmesi ve Durum Tespiti:**
+   * Kullanıcı: *"https://github.com/gurolsarioglu/takip/tree/master/B-5/NewBot buradaki projeyi indir ve nerede olduğumu bul. sonrasında başka bir bakış açısı ile kurup sonrasında işlemlere başka bir yaklaşım sağlayacağız."* talimatını verdi.
+   * Proje çalışma alanına (`c:\projeler\newbot`) çekildi, bağımlılıklar kuruldu (`npm install`), 8 regresyon ve 5 quant testi çalıştırılarak sistemin %100 sağlıklı olduğu doğrulandı.
+2. **Visivero Terminal & Tersine Mühendislik İncelemesi:**
+   * Kullanıcı: *"https://terminal.visivero.com/signin bu kullanıcı adı : gurolsarioglu@gmail.com şifre : gurolsarioglu2212 ben açtım şuanda chrome tarayıcıda açık. odaklandığımız kısım futures altındaki botlar ve izleme listesi. o projedeki izleme listesi, botların farklı bir pencerede açılabiliyor olması, market data, pozisyon, open interest, spota ise spot fiyatı, fr gibi kısımları özellikle de botlar muazzam çalışıyor ama terminal ekranını beğenmiyorum. kendim farklı bir uygulama kullanıyorum. güzel bir kasa yönetimi yok onun için kendi fikirlerim var. ama önce ordaki iyi şeyleri kendi projemde kullanmak istiyorum."* diyerek sisteme erişim sağladı.
+3. **%100 Bağımsızlık ve Kendi Ayaklarımızın Üzerinde Durma İlkesi:**
+   * Kullanıcı: *"biz bu botları tekrardan oluşturacağız. oraya bağlı kalamayız benim üyeliğim bittiğinde ne yapacağız kendi ayaklarımızın üzerinde durmayı öğrenmeliyiz. bundan dolayı sana rea dan kullanabileceğimiz bir şey var mı dedim. çünkü web socket üzerinden java dan gelen veriyi ekranda gösteriyordur. botların nasıl çalıştığı ile ilgili bir kodlama ve matematiksel formül işin sırrını çözmek lazım"* diyerek harici bir servise bağımlı olmadan, tüm bot formül ve algoritmalarını yerel sistemimizde baştan oluşturma talimatını verdi.
+4. **Kesin Takip ve GitHub Kuralı:**
+   * Kullanıcı: *"bizim bir kuralımız var yaptıklarımızı takip edebilmek için tüm işleri kayıt ediyorum birde değişiklikleri githuba gönderiyoruz. bunları da unutma lütfen"* hatırlatmasını yaptı. Yapılan tüm adımların `proje takip.md` belgesine işlenmesi ve Git commit/push ile depoda güvenceye alınması kesinleştirildi.
+
+---
+
+## 🧠 2. Düşündüklerimiz ve Tersine Mühendislik Bulguları (İşin Sırrı Çözüldü)
+
+Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sistemin tüm veri mimarisi deşifre edildi:
+
+1. **Canlı Sinyal Akışı (`wss://bots.visivero.com/ws`):**
+   * Bot sinyallerinin bu gizli WebSocket sunucusundan JSON formatında yayınlandığı test edildi ve canlı mesajlar (`m1`, `m1-premium`, `v3`, `hammer-pro`, `4s`, `div`) anlık olarak yakalandı.
+2. **10 Orijinal Gösterge ve Strateji Formülü Deşifre Edildi (`/api/script-runtime/templates`):**
+   * Visivero'nun arka planda çalıştırdığı ve "sır" olarak saklanan indikatörlerin orijinal Python/PineScript kodları tamamen çıkarıldı:
+     * **WaveTrend with Crosses [LazyBear] (`visivero-wt-cross`):**
+       $$AP = (High + Low + Close) / 3, \quad ESA = EMA(AP, 10), \quad D = EMA(|AP - ESA|, 10)$$
+       $$CI = (AP - ESA) / (0.015 \times D), \quad WT_1 = EMA(CI, 21), \quad WT_2 = SMA(WT_1, 4)$$
+       Aşırı satım eşikleri: $-60$ ve $-53$; Aşırı alım: $+53$ ve $+60$.
+     * **Trader Club 5in1 (`visivero-5in1`):**
+       EMA200, Linreg, MavilimW, PMax, Nadaraya-Watson ve 20 barlık Pivot Lookback Divergence (MACD, RSI, Stoch, CCI, MOM, OBV, CMF, MFI).
+     * **Trader Club BUY-SELL [V.1] (`visivero-tc-buy-sell`):**
+       Reversal Bands ($SMA(20) \pm [3,4,5,6] \times ATR(14)$), Swing Points (HH, HL, LH, LL) ve 10 zaman dilimli (1m–1D) $EMA(144)$ Trend Tablosu.
+     * **Trader Club S/R (`visivero-tc-sr`):**
+       Pivot high/low teyitli 21 seviyeli dinamik destek/direnç kanalları.
+     * **RSI(14), SRSI(14,14,3,3), DEMA(9), BB(20,2), Pivot Points Standard.**
+3. **Piyasa Verileri ve PiP (Picture in Picture) Mimarisi:**
+   * Spot vs Vadeli fiyat makası (Basis): Binance Futures Mark vs Binance Spot Ticker.
+   * Emir Defteri Alıcı/Satıcı Baskısı: Binance Futures `/fapi/v1/depth` (Bids vs Asks toplamı).
+   * Balina & Perakende Oranları: Binance Futures `topLongShortAccountRatio`, `topLongShortPositionRatio` ve `globalLongShortAccountRatio`.
+   * Bağımsız Yüzen Pencere: Tarayıcının modern `documentPictureInPicture` API'si ve `/panel-popup` rotası.
+
+---
+
+## 🛠️ 3. Yaptıklarımız (Teknik Geliştirmeler)
+1. **Çalışma Alanı Hazırlığı & Testler:**
+   * `c:\projeler\newbot` dizininde Git başlatıldı (`git init`), `.gitignore` dosyası eklendi, ilk temel commit (`3440e71`) oluşturuldu.
+2. **Deşifre Araçları & Şablon Arşivi:**
+   * `scratch/find_bots.js`, `scratch/test_ws.js`, `scratch/dump_templates.js` yazılarak Visivero'nun 10 orijinal indikatör şablonu yerel olarak `scratch/templates.json` dosyasına arşivlendi.
+3. **Yerel Quant Motorunun Güçlendirilmesi Planı:**
+   * [`QuantIndicatorsService`](services/quant-indicators.service.js) içine LazyBear WaveTrend WT(10,21), Reversal Bands ve PineScript v5 uyumlu Pivot Divergence algoritmalarının entegrasyonu.
+   * 9 Bot stratejisinin (`bots/strategies/*.bot.js`) Visivero'nun birebir mantığıyla doğrudan Binance Futures WebSocket (`MarketDataEngine`) üzerinden çalıştırılması.
+4. **Özel Kasa Yönetimi (Treasury & Risk Cockpit) Tasarımı:**
+   * Stop-Loss'suz işlem modeli: Kasa Teminat Yüzdesi (Margin Allocation %), Tahmini Likidasyon Fiyatı ve Likidasyon Güvenlik Mesafesi (% Liq Buffer).
+   * Kademeli Alım (DCA Planlayıcı): 1. Parça (%30), 2. Parça (%30), 3. Parça (%40).
+   * Kâr Realizasyonu: TP1 (+%1.5), TP2 (+%2.5), TP3 (+%4.0), TP4 (+%6.0) ve Kısmi Kapatma (`[TP %50]`).
 
 ---
 
