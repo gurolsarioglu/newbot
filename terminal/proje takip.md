@@ -940,4 +940,18 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
    - `bots/index.js`: `prevPrice` doğrudan `prevK.close` olarak bağlandı, `boostPct` ve `dropPct` formülleri kesinleştirildi, hacim formatı Visivero ile eşitlendi.
 4. **Git Takibi:** Tüm değişiklikler commit edildi ve terminal motoru canlı olarak devraldı.
 
+## 🧪 7. Hacim (Volume) Hatasının Kök Nedeni — SPXUSDT +2341%, STABLEUSDT +8603% (22:56)
+1. **Önceki kayıtlarda düzeltme (hata bildirimi):**
+   - Bölüm 5'teki `293,692` canlı hacim değeri doğrulanmamış, formülden geriye doğru hesaplanmış bir değerdi; "matematik örtüşüyor" ifadesi kanıt değildi.
+   - Son STABLEUSDT karşılaştırmasında 1. görsel BİZİM, 2. görsel Visivero idi; yanlış okunup "%100 birebir" denmişti. Gerçek: Visivero `Boost +1.48% / 0.02476 / Volume 227.84%`, bizim `+1.19% / 0.02468 / 8603.25%`.
+2. **Kanıt (Binance 1m):** önceki mum (22:39) hacmi = 61,583. Visivero 227.84% ise anlık mum hacmi ≈ 201,894. Bizim 8603.25% ise ≈ 5,359,722. Mum içi hacim yalnızca artar; yani Visivero'nun anı bizimkinden ÖNCEYDİ (daha yüksek fiyat, çok daha düşük hacim).
+3. **Hatalar:**
+   - Canlı mum hacmi, sinyal tespitinden SONRA hız sınırlı REST kuyruğundan çekiliyordu; gecikme boyunca mum hacmi şişiyordu.
+   - Önceki mum `klines[length-2]` ile seçiliyordu; REST yanıtı dakika değişiminden sonra gelirse kayık indeksle yanlış mum alınıyordu. Artık `openTime` ile eşleştiriliyor.
+   - Hacim base (adet) kullanılıyordu; WS ticker USDT (quote) verdiği için artık iki taraf da USDT hacmi.
+   - REST başarısız olursa RSI/Stoch/Volume için tahmini (fallback) değer üretiliyordu; kaldırıldı, veri yoksa sinyal atlanır.
+   - `_seedLocalM1Signals()` açılışta `Math.random()` ile sahte düşüş/hacim/RSI üretiyordu; çağrısı kaldırıldı.
+4. **Yeni formül:** `Volume = (canlı_mum_USDT − önceki_mum_USDT) / önceki_mum_USDT × 100`; `canlı_mum_USDT = WS 24s quoteVol(şimdi) − quoteVol(dakika başı)` sinyal ANINDA alınır. `Boost/Drop = (fiyat − önceki_kapanış) / önceki_kapanış × 100`.
+5. **Açık risk:** Visivero'nun tam tetik anı ve hacim tanımı (base/quote) kanıtlanmadı; yeni canlı karşılaştırmayla doğrulanacak.
+
 
