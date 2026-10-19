@@ -354,7 +354,7 @@ class BotManager {
     const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
     // ─────────────────────────────────────────────────────────────
-    // A. M1-A Botu: 1m Ani Düşüş (<= -0.65%) — SIFIR-REST HAFIZA İÇİ RADAR
+    // A. M1-A Botu: 1m Ani Düşüş (<= -0.70%) — SIFIR-REST HAFIZA İÇİ RADAR
     // ─────────────────────────────────────────────────────────────
     if (alert.type === 'm1a') {
       if (!m1aDropBot.canEmitSignal(sym, '1m', null, 45000)) return;
@@ -368,15 +368,15 @@ class BotManager {
       let dropPct = alert.dropPct;
 
       try {
-        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 16);
+        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 100);
         if (klines1m && klines1m.length >= 2) {
           const curK = klines1m[klines1m.length - 1];
           const prevK = klines1m[klines1m.length - 2];
 
-          // Previous Price = Güncel 1m mumunun açılış fiyatı (Visivero standardı)
-          if (curK.open > 0) {
-            prevPrice = formatCryptoPrice(curK.open, sym);
-            dropPct = ((alert.price - curK.open) / curK.open) * 100;
+          // Previous Price = Önceki 1m mumunun kapanış fiyatı (Visivero kesin standardı)
+          if (prevK && prevK.close > 0) {
+            prevPrice = formatCryptoPrice(prevK.close, sym);
+            dropPct = ((alert.price - prevK.close) / prevK.close) * 100;
           }
 
           // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
@@ -404,7 +404,7 @@ class BotManager {
 
       const rsiFormatted = `${realRsi}${realRsi <= 30 || realRsi >= 70 ? ' ⚠️' : ''}`;
       const stochFormatted = `${realStochK}/${realStochD}${realStochK <= 20 || realStochK >= 80 ? ' ⚠️' : ''}`;
-      const volFormatted = `${volChangeNum >= 0 ? '+' : ''}${volChangeNum.toFixed(2)}%`;
+      const volFormatted = `${volChangeNum.toFixed(2)}%`;
 
       m1aDropBot.addSignal({
         id: `m1a_${sym}_${now}`,
@@ -443,15 +443,15 @@ class BotManager {
       let boostPct = alert.boostPct;
 
       try {
-        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 16);
+        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 100);
         if (klines1m && klines1m.length >= 2) {
           const curK = klines1m[klines1m.length - 1];
           const prevK = klines1m[klines1m.length - 2];
 
-          // Previous Price = Güncel 1m mumunun açılış fiyatı (Visivero standardı)
-          if (curK.open > 0) {
-            prevPrice = formatCryptoPrice(curK.open, sym);
-            boostPct = ((alert.price - curK.open) / curK.open) * 100;
+          // Previous Price = Önceki 1m mumunun kapanış fiyatı (Visivero kesin standardı)
+          if (prevK && prevK.close > 0) {
+            prevPrice = formatCryptoPrice(prevK.close, sym);
+            boostPct = ((alert.price - prevK.close) / prevK.close) * 100;
           }
 
           // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
@@ -468,7 +468,7 @@ class BotManager {
         }
       } catch (err) {}
 
-      const volFormatted = `${volChangeNum >= 0 ? '+' : ''}${volChangeNum.toFixed(2)}%`;
+      const volFormatted = `${volChangeNum.toFixed(2)}%`;
 
       m1PremiumBot.addSignal({
         id: `m1p_${sym}_${now}`,

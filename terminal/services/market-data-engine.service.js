@@ -64,6 +64,9 @@ class MarketDataEngine extends EventEmitter {
     // 60 Saniyelik kayan pencere (Sliding Window) her sembol için: [ { ts, price, vol } ]
     this.slidingWindows = new Map();
 
+    // 1 Dakikalık Mum Referans Takipçisi (Önceki 1m mum kapanışı bazlı)
+    this.m1MinuteMap = new Map(); // symbol -> { minute, refPrice, lastPrice }
+
     // 250 Mumluk Kline Ring Buffer Havuzu: "${symbol}_${interval}" -> RingBuffer(250)
     this.klineBuffers = new Map();
 
@@ -323,6 +326,23 @@ class MarketDataEngine extends EventEmitter {
         sw.shift();
       }
 
+      // 1 Dakikalık Mum Referans Takipçisi (Önceki 1m mum kapanışı bazlı - Visivero standardı)
+      const curMinute = Math.floor(now / 60000);
+      let m1State = this.m1MinuteMap.get(sym);
+      if (!m1State || m1State.minute !== curMinute) {
+        const refPrice = m1State ? m1State.lastPrice : curPrice;
+        m1State = {
+          minute: curMinute,
+          refPrice: refPrice,
+          lastPrice: curPrice
+        };
+        this.m1MinuteMap.set(sym, m1State);
+      } else {
+        m1State.lastPrice = curPrice;
+      }
+
+      const candle1mChangePct = m1State.refPrice > 0 ? ((curPrice - m1State.refPrice) / m1State.refPrice) * 100 : 0;
+
       // 1 Dakikalık değişim analizi (Aşama 1 Radarı)
       if (sw.length >= 2) {
         const oldest = sw[0];
@@ -333,29 +353,33 @@ class MarketDataEngine extends EventEmitter {
         const vol1mChange = quoteVol - oldest.vol;
         const volChangePct = oldest.vol > 0 ? ((quoteVol - oldest.vol) / oldest.vol) * 100 : 0;
 
+        // Hem mum başı (candle1mChangePct) hem kayan pencere (price1mChangePct) hareketini yakala
+        const effChgPct = Math.abs(candle1mChangePct) >= Math.abs(price1mChangePct) ? candle1mChangePct : price1mChangePct;
+        const effPrevPrice = Math.abs(candle1mChangePct) >= Math.abs(price1mChangePct) ? m1State.refPrice : oldest.price;
+
         // Anlık M1-A ve M1-Premium Radar Olayları (%100 Bağımsız Yerel Motor)
-        // Yalnızca 24s hacmi $1M üzerinde olan ve en az %0.75 hareket eden gerçek pariteler taranır
+        // Yalnızca 24s hacmi $1M üzerinde olan ve en az %0.70 hareket eden gerçek pariteler taranır
         if (quoteVol >= 1000000) {
-          if (price1mChangePct <= -0.75) {
+          if (effChgPct <= -0.70) {
             this.emit('radarAlert', {
               type: 'm1a',
               symbol: sym,
               price: curPrice,
-              prevPrice: oldest.price,
+              prevPrice: effPrevPrice,
               priceStr: t.c,
-              dropPct: price1mChangePct,
+              dropPct: effChgPct,
               volUsd: quoteVol,
               volChangePct,
               timestamp: now
             });
-          } else if (price1mChangePct >= 0.75) {
+          } else if (effChgPct >= 0.70) {
             this.emit('radarAlert', {
               type: 'm1premium',
               symbol: sym,
               price: curPrice,
-              prevPrice: oldest.price,
+              prevPrice: effPrevPrice,
               priceStr: t.c,
-              boostPct: price1mChangePct,
+              boostPct: effChgPct,
               volUsd: quoteVol,
               volChangePct,
               timestamp: now
@@ -466,7 +490,7 @@ class MarketDataEngine extends EventEmitter {
    * Son mum: Canlı oluşan 1m mumu (güncel hacim ve açılış fiyatı)
    * Sondan bir önceki mum: Kapanmış önceki 1m mumu (referans hacim)
    */
-  async getFreshKlines(symbol, interval = '1m', limit = 16) {
+  async getFreshKlines(symbol, interval = '1m', limit = 100) {
     if (!symbol) return [];
     const cleanSym = String(symbol).toUpperCase().trim();
     try {

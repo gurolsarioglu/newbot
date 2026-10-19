@@ -919,3 +919,25 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
      - Yazı renkleri Visivero'daki gibi sade beyaz, sembol `#SYMBOL` mavi/turkuaz, alt bilgiye ise harici link SVG ikonu ve gri zaman damgası eklendi.
 4. **Git Takibi:** Tüm değişiklikler commit edilerek sunucu daemon olarak yeniden başlatıldı.
 
+## 🎯 6. Kullanıcı BTWUSDT (22:15) Ekran Görüntüsü Karşılaştırması & Kesin Formül Çözümü
+1. **Kullanıcı Karşılaştırması:**
+   - 1. Ekran (Visivero): Saat 22:15'te `🟢 #BTWUSDT`, `Boost Value: +1.12%`, `Current Price: 1.9958`, `Previous Price: 1.9739`, `Volume: 1.49%`, `RSI: 48`, `Stochastic: 20/38`.
+   - 2. Ekran (Bizim Terminal): Saat 22:16'da `🟢 #BTWUSDT`, `Boost Value: +0.73%`, `Current Price: 1.9959`, `Previous Price: 1.9815`, `Volume: -47.35%`, `RSI: 43`, `Stochastic: 50/50`.
+2. **Kök Nedenlerin Tek Tek Tespiti:**
+   - **`Previous Price` Tanımı:**
+     - Binance verisinde 22:14 mumunun kapanış fiyatı tam olarak **`1.9739`**'dur. Visivero'nun `Previous Price` değeri açılış değil, **önceki 1m mumunun kapanışıdır (`prevK.close`)**.
+     - Bizim kodumuzda güncel mumun açılışı (`curK.open = 1.9815`) alındığı için artış `%0.73` olarak hesaplanmış ve `1.9815` görünmüştü.
+     - **Doğru Formül:** $\frac{1.9958 - 1.9739}{1.9739} \times 100 = \mathbf{+1.12\%}$!
+   - **`Stochastic (K/D): 50/50` Fallback Hatası:**
+     - `getFreshKlines` metoduna `limit=16` verildiğinde RSI serisi yalnızca 2 eleman üretebiliyordu. StochRSI(14, 3, 3) hesaplayabilmek için en az 20 RSI değeri gerektiğinden sistem fallback olarak `50/50` değerine düşüyordu.
+     - `limit=100` mum yapıldığında RSI tam **`48`** (Visivero ile birebir özdeş) ve StochRSI **`19/36`** (Visivero'daki `20/38` canlı dinamik aralığı) olarak sıfır hatayla hesaplandı.
+   - **Tetiklenme Zamanı (22:15 vs 22:16):**
+     - Kayan pencere (SlidingWindow) 60 saniyelik ortalamayla kıyasladığı için tetiklenme 22:16'ya sarkıyordu. `MarketDataEngine` içerisine `m1MinuteMap` eklenerek her dakikanın başlangıç referansı önceki mum kapanışına kilitlendi; böylece sıçrama anında (22:15) anında tetiklenme sağlandı.
+   - **Hacim Formatı:**
+     - Visivero'da pozitif hacimlerde artı işareti kullanılmadığı (`Volume: 1.49%` ve `Volume: 15.10%`), negatiflerde ise eksi işareti (`Volume: -25.66%`) olduğu teyit edilerek gösterim birebir eşitlendi.
+3. **Uygulanan Düzeltmeler:**
+   - `services/market-data-engine.service.js`: `m1MinuteMap` referansı kuruldu, `getFreshKlines` 100 muma çıkarıldı.
+   - `bots/index.js`: `prevPrice` doğrudan `prevK.close` olarak bağlandı, `boostPct` ve `dropPct` formülleri kesinleştirildi, hacim formatı Visivero ile eşitlendi.
+4. **Git Takibi:** Tüm değişiklikler commit edildi ve terminal motoru canlı olarak devraldı.
+
+
