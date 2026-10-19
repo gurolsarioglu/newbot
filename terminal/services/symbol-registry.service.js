@@ -68,12 +68,14 @@ class SymbolRegistryService {
         timeout: 10000
       };
 
-      https.get('https://fapi.binance.com/fapi/v1/exchangeInfo', options, (res) => {
+      const req = https.get('https://fapi.binance.com/fapi/v1/exchangeInfo', options, (res) => {
         if (res.statusCode !== 200) {
+          res.resume();
           return reject(new Error(`Binance exchangeInfo HTTP ${res.statusCode}`));
         }
         let data = '';
         res.on('data', chunk => data += chunk);
+        res.on('error', reject);
         res.on('end', () => {
           try {
             resolve(JSON.parse(data));
@@ -82,7 +84,7 @@ class SymbolRegistryService {
           }
         });
       }).on('error', reject).on('timeout', () => {
-        reject(new Error('Binance exchangeInfo timeout'));
+        req.destroy(new Error('Binance exchangeInfo timeout'));
       });
     });
   }
@@ -118,7 +120,8 @@ class SymbolRegistryService {
   }
 
   _processExchangeInfo(info) {
-    if (!info || !Array.isArray(info.symbols)) return;
+    if (!info || !Array.isArray(info.symbols)) throw new Error('Gecersiz Binance exchangeInfo yaniti');
+    const nextSymbols = new Map();
 
     info.symbols.forEach(s => {
       if (s.contractType !== 'PERPETUAL' || s.status !== 'TRADING' || s.quoteAsset !== 'USDT') {
@@ -132,10 +135,11 @@ class SymbolRegistryService {
       const rawStepSize = lotSizeFilter ? lotSizeFilter.stepSize : '0.001';
 
       const decimals = this._parseDecimals(rawTickSize);
-      const minMove = Number(Math.pow(10, -decimals).toFixed(decimals));
+      const minMove = Number(rawTickSize);
       const qtyDecimals = this._parseDecimals(rawStepSize);
 
-      this.symbols.set(s.symbol, {
+      if (!Number.isFinite(minMove) || minMove <= 0) return;
+      nextSymbols.set(s.symbol, {
         symbol: s.symbol,
         baseAsset: s.baseAsset,
         quoteAsset: s.quoteAsset,
@@ -148,6 +152,8 @@ class SymbolRegistryService {
       });
     });
 
+    if (nextSymbols.size === 0) throw new Error('Binance aktif USDT kontrati dondurmedi');
+    this.symbols = nextSymbols;
     this.lastUpdated = Date.now();
   }
 
@@ -178,7 +184,7 @@ class SymbolRegistryService {
   formatPrice(rawPrice, sym) {
     if (rawPrice === null || rawPrice === undefined || rawPrice === '') return '0.00';
     const num = typeof rawPrice === 'number' ? rawPrice : parseFloat(rawPrice);
-    if (isNaN(num)) return '0.00';
+    if (!Number.isFinite(num)) return '0.00';
 
     const decimals = this.getPrecision(sym);
     return num.toFixed(decimals);

@@ -7,11 +7,12 @@ const fs    = require('fs');
 const path  = require('path');
 const https = require('https');
 
-const DATA_DIR  = path.join(__dirname, '..', 'data');
+const DATA_DIR  = process.env.TERMINAL_DATA_DIR || path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'daily_history.json');
 
 // RAM Önbelleği
 let memoryDb = null;
+let loadError = null;
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -26,11 +27,15 @@ function loadDatabase() {
   if (fs.existsSync(DATA_FILE)) {
     try {
       const raw = fs.readFileSync(DATA_FILE, 'utf8');
-      memoryDb = JSON.parse(raw);
-      if (!memoryDb.coins) memoryDb.coins = {};
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !parsed.coins || typeof parsed.coins !== 'object' || Array.isArray(parsed.coins)) {
+        throw new Error('Gecersiz gunluk gecmis dosyasi');
+      }
+      memoryDb = parsed;
       return memoryDb;
     } catch (err) {
-      console.error('[HistoryService] Veritabanı okuma hatası, sıfırlanıyor:', err.message);
+      loadError = err;
+      console.error('[HistoryService] Veritabani okunamadi; mevcut dosya korunuyor:', err.message);
     }
   }
 
@@ -43,10 +48,13 @@ function loadDatabase() {
 
 function saveDatabase() {
   try {
+    if (loadError) throw new Error('Gunluk gecmis dosyasi okunamadi; mevcut dosya korunuyor');
     ensureDataDir();
     if (!memoryDb) memoryDb = { updatedAt: new Date().toISOString(), coins: {} };
     memoryDb.updatedAt = new Date().toISOString();
-    fs.writeFileSync(DATA_FILE, JSON.stringify(memoryDb, null, 2), 'utf8');
+    const tempFile = `${DATA_FILE}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(memoryDb, null, 2), 'utf8');
+    fs.renameSync(tempFile, DATA_FILE);
   } catch (err) {
     console.error('[HistoryService] Veritabanı kayıt hatası:', err.message);
   }
@@ -64,10 +72,12 @@ function fetchJson(url) {
 
     https.get(url, options, (res) => {
       if (res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume();
         return reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
       }
       let data = '';
       res.on('data', chunk => data += chunk);
+      res.on('error', reject);
       res.on('end', () => {
         try {
           resolve(JSON.parse(data));
@@ -97,7 +107,7 @@ function calculateEMA(prices, period = 200) {
   for (let i = initSlice.length; i < prices.length; i++) {
     ema = (prices[i] - ema) * k + ema;
   }
-  return parseFloat(ema.toFixed(6));
+  return ema;
 }
 
 /**
@@ -225,7 +235,7 @@ function calculate200dMetrics(rawCandles, symbol) {
 
 class HistoryService {
   constructor() {
-    this.syncLocks = new Set();
+    this.syncLocks = new Map();
   }
 
   /**
@@ -234,7 +244,8 @@ class HistoryService {
    * @param {boolean} forceRefresh - Önbelleği atlayıp doğrudan taze veri çeker
    */
   async getCoinHistory(symbol, forceRefresh = false) {
-    const cleanSymbol = symbol.toUpperCase();
+    const cleanSymbol = String(symbol || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{1,30}USDT$/.test(cleanSymbol)) return null;
     const db = loadDatabase();
     const existing = db.coins[cleanSymbol];
     const now = Date.now();
@@ -245,12 +256,20 @@ class HistoryService {
     }
 
     if (this.syncLocks.has(cleanSymbol)) {
-      // Zaten bir istek devam ediyorsa var olanı dön
-      return existing || null;
+      return this.syncLocks.get(cleanSymbol);
     }
 
+    const pending = this._syncCoinHistory(cleanSymbol, existing, db, now);
+    this.syncLocks.set(cleanSymbol, pending);
     try {
-      this.syncLocks.add(cleanSymbol);
+      return await pending;
+    } finally {
+      this.syncLocks.delete(cleanSymbol);
+    }
+  }
+
+  async _syncCoinHistory(cleanSymbol, existing, db, now) {
+    try {
       const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${cleanSymbol}&interval=1d&limit=200`;
       const rawCandles = await fetchJson(url);
 
@@ -272,8 +291,6 @@ class HistoryService {
     } catch (err) {
       console.warn(`[HistoryService] ${cleanSymbol} 200 günlük veri çekilemedi:`, err.message);
       return existing || null;
-    } finally {
-      this.syncLocks.delete(cleanSymbol);
     }
   }
 
@@ -287,7 +304,10 @@ class HistoryService {
     }
 
     const results = {};
-    const promises = symbols.map(async (sym) => {
+    const uniqueSymbols = [...new Set(symbols.map(s => String(s || '').trim().toUpperCase()))].slice(0, 100);
+    // Toplu favori açılışı Binance'e yüzlerce eşzamanlı istek yollamasın.
+    for (let offset = 0; offset < uniqueSymbols.length; offset += 5) {
+      await Promise.all(uniqueSymbols.slice(offset, offset + 5).map(async (sym) => {
       const data = await this.getCoinHistory(sym, false);
       if (data) {
         results[sym] = {
@@ -296,9 +316,8 @@ class HistoryService {
           lastSync: data.lastSync
         };
       }
-    });
-
-    await Promise.all(promises);
+      }));
+    }
     return results;
   }
 

@@ -1,177 +1,92 @@
-/**
- * derivatives-enricher.service.js — Alpha Terminal Türev Veri Zenginleştirici
- * 
- * Teknik kriteri geçen aday coinler için Binance Futures türev verilerini çeker:
- * - Balina Pozisyon L/S Oranı (Top Trader Long/Short Ratio)
- * - Perakende Hesap L/S Oranı (Global Long/Short Account Ratio)
- * - Açık Pozisyon (Open Interest - OI) Değişimi
- * - Fonlama Oranı (Funding Rate) ve Geri Sayım
- * 
- * 60 saniye TTL önbellek (Cache) ve Token Bucket Hız Sınırlayıcı ile korunur.
- */
-
-const https = require('https');
-
+/** Binance türev verileri. Eksik veriler null kalır; oran/fonlama uydurulmaz. */
 class DerivativesEnricherService {
   constructor() {
     this.cache = new Map();
-    this.ttlMs = 60 * 1000; // 60 saniye TTL
-    this.activeRequests = new Map(); // In-flight request deduplication
+    this.ttlMs = 60 * 1000;
+    this.activeRequests = new Map();
   }
 
   _fetchJson(url) {
-    return new Promise((resolve, reject) => {
-      const options = {
-        headers: {
-          'User-Agent': 'AlphaTerminal/DerivativesEngine-2.0',
-          'Accept': 'application/json'
-        },
-        timeout: 5000
-      };
+    // Mum istekleri ile aynı ağırlık bütçesini ve HTTP timeout yönetimini kullan.
+    return require('./market-data-engine.service').safeFetch(url, 1);
+  }
 
-      https.get(url, options, (res) => {
-        if (res.statusCode !== 200) {
-          return reject(new Error(`HTTP ${res.statusCode}`));
-        }
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(e);
-          }
-        });
-      }).on('error', reject).on('timeout', () => reject(new Error('Timeout')));
-    });
+  _number(value, min = -Infinity, max = Infinity) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= min && number <= max ? number : null;
+  }
+
+  _rows(result) {
+    return result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : [];
+  }
+
+  _withFunding(data, fundingMeta) {
+    return {
+      ...data,
+      fundingRate: this._number(fundingMeta?.fundingRate),
+      nextFundingTime: this._number(fundingMeta?.nextFundingTime, 1)
+    };
   }
 
   async enrich(symbol, fundingMeta = null) {
     if (!symbol) return null;
     const cleanSym = String(symbol).toUpperCase().trim();
+    if (!/^[A-Z0-9]+$/.test(cleanSym)) return null;
     const now = Date.now();
-
-    // 1. Önbellek Kontrolü (60 saniye TTL)
     const cached = this.cache.get(cleanSym);
-    if (cached && (now - cached.ts < this.ttlMs)) {
-      return cached.data;
+    if (cached && now - cached.ts < this.ttlMs) return this._withFunding(cached.data, fundingMeta);
+
+    let pending = this.activeRequests.get(cleanSym);
+    if (!pending) {
+      pending = this._load(cleanSym, now);
+      this.activeRequests.set(cleanSym, pending);
     }
-
-    // 2. Çift istek engelleme (In-flight promise reuse)
-    if (this.activeRequests.has(cleanSym)) {
-      return this.activeRequests.get(cleanSym);
+    try {
+      return this._withFunding(await pending, fundingMeta);
+    } finally {
+      if (this.activeRequests.get(cleanSym) === pending) this.activeRequests.delete(cleanSym);
     }
+  }
 
-    const requestPromise = (async () => {
-      try {
-        const [topPosRes, globAccRes, oiRes] = await Promise.allSettled([
-          this._fetchJson(`https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${cleanSym}&period=5m&limit=2`),
-          this._fetchJson(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${cleanSym}&period=5m&limit=2`),
-          this._fetchJson(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${cleanSym}&period=5m&limit=2`)
-        ]);
-
-        // Balina L/S Pozisyon Oranı
-        let topTraderLongRatio = 50.0;
-        let topTraderShortRatio = 50.0;
-        let topTraderLsRatio = 1.0;
-        let topTraderChange = 0.0;
-
-        if (topPosRes.status === 'fulfilled' && Array.isArray(topPosRes.value) && topPosRes.value.length > 0) {
-          const list = topPosRes.value;
-          const latest = list[list.length - 1];
-          const prev = list.length > 1 ? list[list.length - 2] : null;
-
-          topTraderLongRatio = parseFloat((parseFloat(latest.longAccount) * 100).toFixed(2));
-          topTraderShortRatio = parseFloat((parseFloat(latest.shortAccount) * 100).toFixed(2));
-          topTraderLsRatio = parseFloat(parseFloat(latest.longShortRatio).toFixed(2));
-
-          if (prev) {
-            topTraderChange = parseFloat(((parseFloat(latest.longAccount) - parseFloat(prev.longAccount)) * 100).toFixed(2));
-          }
-        }
-
-        // Perakende Hesap L/S Oranı
-        let globalLongRatio = 50.0;
-        let globalShortRatio = 50.0;
-        let globalLsRatio = 1.0;
-
-        if (globAccRes.status === 'fulfilled' && Array.isArray(globAccRes.value) && globAccRes.value.length > 0) {
-          const list = globAccRes.value;
-          const latest = list[list.length - 1];
-          globalLongRatio = parseFloat((parseFloat(latest.longAccount) * 100).toFixed(2));
-          globalShortRatio = parseFloat((parseFloat(latest.shortAccount) * 100).toFixed(2));
-          globalLsRatio = parseFloat(parseFloat(latest.longShortRatio).toFixed(2));
-        }
-
-        // Açık Pozisyon (OI) Değişimi
-        let oiDeltaPct = 0.0;
-        let currentOi = 0;
-        if (oiRes.status === 'fulfilled' && Array.isArray(oiRes.value) && oiRes.value.length > 0) {
-          const list = oiRes.value;
-          const latest = list[list.length - 1];
-          const prev = list.length > 1 ? list[list.length - 2] : null;
-          currentOi = parseFloat(latest.sumOpenInterest || 0);
-
-          if (prev && parseFloat(prev.sumOpenInterest) > 0) {
-            const pOi = parseFloat(prev.sumOpenInterest);
-            oiDeltaPct = parseFloat((((currentOi - pOi) / pOi) * 100).toFixed(2));
-          }
-        }
-
-        // Fonlama Oranı
-        let fundingRate = fundingMeta ? fundingMeta.fundingRate : 0.0001;
-        let nextFundingTime = fundingMeta ? fundingMeta.nextFundingTime : Date.now() + 14400000;
-
-        const enrichedData = {
-          symbol: cleanSym,
-          topTraderLongRatio,
-          topTraderShortRatio,
-          topTraderLsRatio,
-          topTraderChange,
-          globalLongRatio,
-          globalShortRatio,
-          globalLsRatio,
-          oiDeltaPct,
-          currentOi,
-          fundingRate,
-          nextFundingTime,
-          isWhaleAccumulating: topTraderLongRatio >= 60.0,
-          isRetailShorting: globalShortRatio >= 55.0,
-          cachedAt: now
-        };
-
-        this.cache.set(cleanSym, { data: enrichedData, ts: now });
-        return enrichedData;
-      } catch (err) {
-        console.warn(`[DerivativesEnricher] ${cleanSym} veri cekme hatasi:`, err.message);
-        const fallback = {
-          symbol: cleanSym,
-          topTraderLongRatio: 50.0,
-          topTraderShortRatio: 50.0,
-          topTraderLsRatio: 1.0,
-          topTraderChange: 0.0,
-          globalLongRatio: 50.0,
-          globalShortRatio: 50.0,
-          globalLsRatio: 1.0,
-          oiDeltaPct: 0.0,
-          currentOi: 0,
-          fundingRate: fundingMeta ? fundingMeta.fundingRate : 0.0001,
-          nextFundingTime: fundingMeta ? fundingMeta.nextFundingTime : Date.now() + 14400000,
-          isWhaleAccumulating: false,
-          isRetailShorting: false,
-          cachedAt: now
-        };
-        this.cache.set(cleanSym, { data: fallback, ts: now });
-        return fallback;
-      } finally {
-        this.activeRequests.delete(cleanSym);
-      }
-    })();
-
-    this.activeRequests.set(cleanSym, requestPromise);
-    return requestPromise;
+  async _load(symbol, now) {
+    const results = await Promise.allSettled([
+      this._fetchJson(`https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=5m&limit=2`),
+      this._fetchJson(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=2`),
+      this._fetchJson(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=2`)
+    ]);
+    const [topRows, globalRows, oiRows] = results.map(result => this._rows(result));
+    const latestTop = topRows.at(-1);
+    const previousTop = topRows.at(-2);
+    const latestGlobal = globalRows.at(-1);
+    const latestOi = oiRows.at(-1);
+    const previousOi = oiRows.at(-2);
+    const topLong = this._number(latestTop?.longAccount, 0, 1);
+    const topShort = this._number(latestTop?.shortAccount, 0, 1);
+    const previousTopLong = this._number(previousTop?.longAccount, 0, 1);
+    const globalLong = this._number(latestGlobal?.longAccount, 0, 1);
+    const globalShort = this._number(latestGlobal?.shortAccount, 0, 1);
+    const currentOi = this._number(latestOi?.sumOpenInterest, 0);
+    const prevOi = this._number(previousOi?.sumOpenInterest, 0);
+    const data = {
+      symbol,
+      topTraderLongRatio: topLong === null ? null : topLong * 100,
+      topTraderShortRatio: topShort === null ? null : topShort * 100,
+      topTraderLsRatio: this._number(latestTop?.longShortRatio, 0),
+      topTraderChange: topLong === null || previousTopLong === null ? null : (topLong - previousTopLong) * 100,
+      globalLongRatio: globalLong === null ? null : globalLong * 100,
+      globalShortRatio: globalShort === null ? null : globalShort * 100,
+      globalLsRatio: this._number(latestGlobal?.longShortRatio, 0),
+      currentOi,
+      oiDeltaPct: currentOi === null || prevOi === null || prevOi === 0 ? null : (currentOi - prevOi) / prevOi * 100,
+      isWhaleAccumulating: topLong !== null && topLong >= 0.60,
+      isRetailShorting: globalShort !== null && globalShort >= 0.55,
+      cachedAt: now
+    };
+    // Tamamen başarısız bir yanıtı 60 saniye boyunca gerçek veri gibi saklama.
+    if (topLong !== null || globalLong !== null || currentOi !== null) this.cache.set(symbol, { data, ts: now });
+    return data;
   }
 }
 
-const derivativesEnricherService = new DerivativesEnricherService();
-module.exports = derivativesEnricherService;
+module.exports = new DerivativesEnricherService();

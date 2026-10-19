@@ -26,18 +26,12 @@ class FundingRateBot extends BaseBot {
   }
 
   /**
-   * Binance 8 saatlik periyotlarına (UTC 00:00, 08:00, 16:00) göre kalan süreyi hesaplar
+   * Borsanın sembole özel nextFundingTime zamanına kalan süreyi hesaplar.
    */
-  calculateFundingCountdown() {
-    const now = new Date();
-    const currentUtcHour = now.getUTCHours();
-    const nextFundingUtcHour = Math.ceil((currentUtcHour + 0.001) / 8) * 8;
-    
-    const targetUtc = new Date(now);
-    targetUtc.setUTCHours(nextFundingUtcHour, 0, 0, 0);
-
-    let diffMs = targetUtc.getTime() - now.getTime();
-    if (diffMs < 0) diffMs += 8 * 3600 * 1000;
+  calculateFundingCountdown(nextFundingTime) {
+    const targetTime = this.parseMetric(nextFundingTime, 1);
+    if (targetTime === null) return '—';
+    const diffMs = Math.max(0, targetTime - Date.now());
 
     const diffSecTotal = Math.floor(diffMs / 1000);
     const hours = Math.floor(diffSecTotal / 3600);
@@ -56,6 +50,12 @@ class FundingRateBot extends BaseBot {
    * 4. Negatif Derinleşme -> 'Negative Funding Deepening' (🔴)
    */
   evaluateFundingRate({ currNum, prevNum, explicitAlert, explicitDot }) {
+    if (!Number.isFinite(currNum)) return { valid: false, reason: 'Fonlama verisi eksik.' };
+    if (!Number.isFinite(prevNum)) {
+      return currNum < 0
+        ? { valid: true, alertText: 'Negative Funding Alert', dot: '🔴' }
+        : { valid: false, reason: 'Önceki fonlama verisi eksik.' };
+    }
     // Açıkça belirtilmiş bir durum varsa önceliklendir
     if (explicitAlert && explicitDot) {
       return { valid: true, alertText: explicitAlert, dot: explicitDot };
@@ -112,11 +112,12 @@ class FundingRateBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const currNum = this.parseFundingRate(s.fundingRate || s.funding);
-    const prevNum = this.parseFundingRate(s.previousFunding || (currNum >= 0 ? currNum - 0.05 : currNum + 0.05));
+    const currNum = this.parseMetric(s.fundingRate ?? s.funding);
+    const prevNum = this.parseMetric(s.previousFunding);
 
     // Fonlama Değişimi & Squeeze Karar Motoru
     const explicitAlert = s.alertText ? String(s.alertText).replace(/^[⚠️\s]+/, '').trim() : null;
@@ -133,16 +134,15 @@ class FundingRateBot extends BaseBot {
     }
 
     // Fark hesaplama: Current - Previous
-    const diffNum = currNum - prevNum;
-    const diffFormatted = diffNum >= 0 ? `+${diffNum.toFixed(4)}%` : `${diffNum.toFixed(4)}%`;
+    const diffNum = prevNum === null ? null : currNum - prevNum;
+    const diffFormatted = diffNum === null ? '—' : (diffNum >= 0 ? `+${diffNum.toFixed(4)}%` : `${diffNum.toFixed(4)}%`);
 
     const currFormatted = currNum >= 0 ? `+${currNum.toFixed(4)}%` : `${currNum.toFixed(4)}%`;
-    const prevFormatted = prevNum >= 0 ? `+${prevNum.toFixed(4)}%` : `${prevNum.toFixed(4)}%`;
+    const prevFormatted = prevNum === null ? '—' : (prevNum >= 0 ? `+${prevNum.toFixed(4)}%` : `${prevNum.toFixed(4)}%`);
 
-    const timeRemaining = s.timeRemaining || this.calculateFundingCountdown();
+    const timeRemaining = s.timeRemaining || this.calculateFundingCountdown(s.nextFundingTime);
 
     const card = {
-      id: 'fr_' + Date.now(),
       symbol: symbol,
       dot: analysis.dot,
       alertText: analysis.alertText,
@@ -154,7 +154,7 @@ class FundingRateBot extends BaseBot {
       time: nowTime
     };
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

@@ -443,11 +443,13 @@ const ChartPlugin = (() => {
     });
 
     // WebSocket'ten gelen canlı kline (0ms gecikme ile doğrudan series.update)
-    EventBus.on('ws:kline', ({ symbol, kline }) => {
-      if (symbol.toUpperCase() !== currentSymbol) return;
+    EventBus.on('ws:kline', ({ symbol, interval, kline }) => {
+      if (symbol.toUpperCase() !== currentSymbol || interval !== currentInterval) return;
       if (!candleSeries || !volumeSeries) return;
 
       const timeSec = Math.floor(kline.openTime / 1000);
+      const latest = klineData[klineData.length - 1];
+      if (latest && timeSec < latest.time) return;
       const bar = {
         time:  timeSec,
         open:  kline.open,
@@ -554,10 +556,11 @@ const ChartPlugin = (() => {
       klineData = Array.from(map.values()).sort((a, b) => a.time - b.time);
 
       // Fiyat hassasiyetini belirle (SymbolRegistry resmi kontrat tickSize ve minMove)
-      const precision = (typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getPrecision)
+      const hasMeta = typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getSymbol && SymbolRegistry.getSymbol(targetSymbol);
+      const precision = hasMeta
         ? SymbolRegistry.getPrecision(targetSymbol)
         : detectCoinPrecision(raw);
-      const minMove = (typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getMinMove)
+      const minMove = hasMeta
         ? SymbolRegistry.getMinMove(targetSymbol)
         : Number(Math.pow(10, -precision).toFixed(precision));
       candleSeries.applyOptions({

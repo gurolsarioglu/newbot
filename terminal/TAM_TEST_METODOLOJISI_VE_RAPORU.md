@@ -1,5 +1,7 @@
 # 🎯 Alpha Terminal — Gerçekçi Tam Test Metodolojisi & Fiyat Hassasiyeti Raporu
 
+> **19.10.2026 güncellemesi:** Bu belgedeki 36 test sonucu tarihsel kayıttır. Güncel doğrulama `npm test` ile **117 kontrol**, ayrıca gerçek Binance mum hacmi karşılaştırması içerir. Kapsam, düzeltilen hatalar ve test sınırları için [güncel denetim raporunu](review/2026-10-19-comprehensive-audit.md) kullanın. Eski suite artık ana test komutu değildir.
+
 **Tarih:** 13 Ekim 2026  
 **Kapsam:** Tüm Sistem (Fiyat Formatlama Motoru, 9 Bot Stratejisi, 60 Günlük Kalıcı Sinyal Arşivi, REST API'ler ve Grafik/Arayüz Motorları)  
 **Test Süiti:** [`review/full-realistic-terminal-test.cjs`](review/full-realistic-terminal-test.cjs)  

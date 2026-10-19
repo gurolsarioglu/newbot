@@ -14,6 +14,7 @@ class BotController {
     try {
       const requestedBotId = req.query.bot || 'hammerproplus';
       const bot = botManager.getBot(requestedBotId);
+      if (!bot) return res.status(404).json({ error: 'Bot bulunamadi' });
 
       return res.json({
         bot: bot.name,
@@ -32,12 +33,16 @@ class BotController {
    */
   getCoinHistory(req, res) {
     try {
-      const symbol = (req.query.symbol || req.query.coin || '').toUpperCase().trim();
-      if (!symbol) {
+      const rawSymbol = req.query.symbol || req.query.coin || '';
+      const symbol = typeof rawSymbol === 'string' ? rawSymbol.toUpperCase().trim() : '';
+      if (!/^[A-Z0-9]{1,30}USDT$/.test(symbol)) {
         return res.status(400).json({ error: 'symbol parametresi zorunludur (örn: ?symbol=SUIUSDT)' });
       }
 
-      const days = parseInt(req.query.days || 60, 10);
+      const days = req.query.days === undefined ? 60 : Number(req.query.days);
+      if (!Number.isInteger(days) || days < 1 || days > 60) {
+        return res.status(400).json({ error: 'days 1 ile 60 arasinda tam sayi olmalidir' });
+      }
       const signals = signalStoreService.getSignalsByCoin(symbol, days);
       const stats = signalStoreService.getStatsByCoin(symbol, days);
 
@@ -61,11 +66,20 @@ class BotController {
   emitSignal(req, res) {
     try {
       const signalData = req.body;
-      if (!signalData || (!signalData.coin && !signalData.symbol)) {
+      if (!signalData || typeof signalData !== 'object' || Array.isArray(signalData) || typeof (signalData.symbol || signalData.coin) !== 'string') {
         return res.status(400).json({ error: 'Gecersiz sinyal verisi' });
+      }
+      if (!/^[A-Z0-9_]+USDT$/.test((signalData.symbol || signalData.coin).trim().toUpperCase())) {
+        return res.status(400).json({ error: 'Gecersiz sembol' });
+      }
+      if (!botManager.getBot(signalData.botId || signalData.botType)) {
+        return res.status(400).json({ error: 'Bilinmeyen bot' });
       }
 
       const result = botManager.emitSignal(signalData);
+      if (!result.affectedBots.length) {
+        return res.status(422).json({ success: false, rejected: true, ...result, message: 'Sinyal strateji kosullarini saglamadi veya daha once kaydedildi' });
+      }
       console.log(`[Signal Ingest] ✅ Yeni sinyal eklendi: #${result.symbol} -> [${result.affectedBots.join(', ')}] [${result.time}]`);
       
       return res.json({

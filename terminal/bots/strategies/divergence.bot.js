@@ -4,7 +4,7 @@
  */
 
 const BaseBot = require('../base/base-bot');
-const { formatCryptoPrice, computePrevPrice, getDecimalPlaces } = require('../../services/price-formatter');
+const { formatCryptoPrice, computePrevPrice } = require('../../services/price-formatter');
 
 class DivergenceBot extends BaseBot {
   constructor() {
@@ -42,7 +42,10 @@ class DivergenceBot extends BaseBot {
    * - '🟢': Pozitif Uyumsuzluk / Boğa Dönüşü (1h RSI dipte, toparlanma var)
    * - '🔴': Negatif Uyumsuzluk / Ayı Dönüşü (1h RSI tepede, momentum zayıflamış)
    */
-  evaluateDivergence({ rsi1h, rsi4h, boostNum, explicitDot, explicitStrategy, position }) {
+  evaluateDivergence({ rsi1h, rsi4h, boostNum, explicitDot, explicitStrategy, position, hasDivergence, hasSmaCross }) {
+    if (!Number.isFinite(boostNum) || !Number.isFinite(rsi1h) || (!hasDivergence && !hasSmaCross)) {
+      return { valid: false, reason: 'Teyit edilmiş pivot uyumsuzluğu veya RSI/SMA kesişimi yok.' };
+    }
     const absBoost = Math.abs(boostNum);
     // 1. Minimum hareket eşiği (en az 0.25% sapma olmalı)
     if (absBoost < 0.25) {
@@ -77,14 +80,16 @@ class DivergenceBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const now = Date.now();
     const dateObj = new Date(now);
     const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const priceNum = parseFloat(s.price || 0);
-    const boostNum = this.parseBoost(s.boost || s.boostValue);
+    const priceNum = Number(s.price);
+    const boostNum = this.parseMetric(s.boost ?? s.boostValue);
+    if (!Number.isFinite(priceNum) || priceNum <= 0 || boostNum === null) return null;
     const boostFormatted = boostNum >= 0 ? `+${boostNum.toFixed(2)}%` : `${boostNum.toFixed(2)}%`;
 
     // Strateji İsmi Belirleme
@@ -94,25 +99,27 @@ class DivergenceBot extends BaseBot {
     else if (s.rsi1hDiv) strategy = '1H RSI DIVERGENCE';
 
     // RSI Değerleri (Sayısal parse ve dinamik ❗ formatı)
-    const rawRsi = parseInt(s.rsi, 10);
-    const rsi1hNum = parseInt(s.rsi1h || (!isNaN(rawRsi) ? rawRsi : 28), 10);
-    const rsi4hNum = parseInt(s.rsi4h || 35, 10);
-    const rsi1dNum = parseInt(s.rsi1d || 45, 10);
+    const rsi1hNum = this.parseMetric(s.rsi1h ?? s.rsi, 0, 100);
+    const rsi4hNum = this.parseMetric(s.rsi4h, 0, 100);
+    const rsi1dNum = this.parseMetric(s.rsi1d, 0, 100);
 
     // SRSI Değerleri
-    const srsi1hNum = parseInt(s.srsi1h || s.stochK || 12, 10);
-    const srsi4hNum = parseInt(s.srsi4h || s.stochD || 20, 10);
-    const srsi1dNum = parseInt(s.srsi1d || 50, 10);
+    const srsi1hNum = this.parseMetric(s.srsi1h ?? s.stochK, 0, 100);
+    const srsi4hNum = this.parseMetric(s.srsi4h, 0, 100);
+    const srsi1dNum = this.parseMetric(s.srsi1d, 0, 100);
 
     // Uyumsuzluk ve Yön Karar Motoru
-    const explicitDot = s.dot || (s.position === 'Short' ? '🔴' : (s.position === 'Long' ? '🟢' : null));
+    const explicitDot = s.divergence?.hasBullDiv === true ? '🟢' : (s.divergence?.hasBearDiv === true ? '🔴' :
+      (s.dot || (s.position === 'Short' ? '🔴' : (s.position === 'Long' ? '🟢' : null))));
     const analysis = this.evaluateDivergence({
       rsi1h: rsi1hNum,
       rsi4h: rsi4hNum,
       boostNum,
       explicitDot,
       explicitStrategy: s.strategy,
-      position: s.position
+      position: s.position,
+      hasDivergence: s.rsi1hDiv === true || s.divergence?.hasBullDiv === true || s.divergence?.hasBearDiv === true,
+      hasSmaCross: s.rsiSmaCross === true
     });
 
     if (!analysis.valid) {
@@ -125,35 +132,29 @@ class DivergenceBot extends BaseBot {
     // prevPrice güvenliği (Çift Yönlü Hesaplama):
     // Pozitif Uyumsuzluk (🟢): Fiyat dipten sekti -> prevPrice < currentPrice: price / (1 + boost/100)
     // Negatif Uyumsuzluk (🔴): Fiyat tepeden döndü -> prevPrice > currentPrice: price * (1 + boost/100)
-    let prevPriceStr = s.prevPrice ? String(s.prevPrice) : '';
+    let prevPriceStr = Number(s.prevPrice) > 0 ? String(s.prevPrice) : '';
     if (!prevPriceStr || prevPriceStr === String(s.price)) {
       if (priceNum > 0 && boostNum !== 0) {
-        const decimals = Math.min(8, Math.max(2, getDecimalPlaces(s.price || priceNum)));
-        if (dot === '🔴') {
-          prevPriceStr = (priceNum * (1 + boostNum / 100)).toFixed(decimals);
-        } else {
-          prevPriceStr = computePrevPrice(priceNum, boostNum, s.price);
-        }
+        prevPriceStr = computePrevPrice(priceNum, boostNum, s.price);
       } else {
         prevPriceStr = formatCryptoPrice(s.price);
       }
     }
 
     // Pivot Mesafesi Kontrolü
-    let pivotDisplay = '%0.32 ⚠️';
+    let pivotDisplay = '—';
     if (s.pivot !== undefined && s.pivot !== null) {
       const pDist = this.parseDistance(s.pivot);
       pivotDisplay = typeof s.pivot === 'string' && s.pivot.includes('%') 
         ? s.pivot 
-        : (pDist !== null ? `%${pDist.toFixed(2)} ⚠️` : '%0.32 ⚠️');
+        : (pDist !== null ? `%${pDist.toFixed(2)} ⚠️` : '—');
     }
 
     // Dinamik ❗ formatlama: RSI <= 30 veya >= 70; SRSI <= 15 veya >= 85
-    const fmtRsi = (v) => `${v}${v >= 70 || v <= 30 ? ' ❗' : ''}`;
-    const fmtSrsi = (v) => `${v}${v >= 85 || v <= 15 ? ' ❗' : ''}`;
+    const fmtRsi = (v) => this.formatMetric(v, v >= 70 || v <= 30);
+    const fmtSrsi = (v) => this.formatMetric(v, v >= 85 || v <= 15);
 
     const card = {
-      id: 'div_' + now,
       symbol: symbol,
       timestamp: now,
       isoDate: dateObj.toISOString(),
@@ -178,7 +179,7 @@ class DivergenceBot extends BaseBot {
       time: nowTime
     };
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

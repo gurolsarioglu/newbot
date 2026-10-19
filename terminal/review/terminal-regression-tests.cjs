@@ -4,6 +4,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const checks = [];
+const skipped = [];
 
 function env() {
   const elements = new Map(), handlers = {}, timers = [];
@@ -75,19 +76,8 @@ async function flush() { await new Promise(r => setImmediate(r)); }
   if (html.includes('(function initAlphaTerminal()')) {
     const inline = html.slice(html.indexOf('(function initAlphaTerminal()'), html.lastIndexOf('</script>')).replace('})();', 'globalThis.review={updatePositionUI,updateBinanceBarMetrics,changeCoin};})();');
     vm.runInContext(inline, e.ctx);
-  } else {
-    e.ctx.review = {
-      changeCoin(sym) { e.get('snap-symbol').textContent = sym; },
-      updatePositionUI(price) {
-        e.get('btb-decision-badge').textContent = 'POZİSYON YOK';
-        e.get('btb-pnl-pill').textContent = '—';
-      },
-      updateBinanceBarMetrics({ quoteVolume, volume }) {
-        if (quoteVolume) e.get('btb-vol-usdt').textContent = '$13.40B';
-      }
-    };
   }
-  
+  if (e.ctx.review) {
   e.ctx.review.changeCoin('BTCUSDT');
   e.ctx.review.updatePositionUI(84000);
   const btcBadge = e.get('btb-decision-badge').textContent;
@@ -100,6 +90,9 @@ async function flush() { await new Promise(r => setImmediate(r)); }
   e.ctx.review.updateBinanceBarMetrics({ volume: 159000 }); // ticker with base volume only
   const wsVol = e.get('btb-vol-usdt').textContent;
   assert('H06: USDT volume preserved and not overwritten by base volume', restVol === '$13.40B' && wsVol === '$13.40B', { restVol, wsVol });
+  } else {
+    skipped.push('H01 and H06: legacy inline position/volume widgets are absent from the current treasury cockpit.');
+  }
 
   // Test 3: No confirmation message without OI / volume proof
   function verdict() {
@@ -193,11 +186,11 @@ async function flush() { await new Promise(r => setImmediate(r)); }
 
   // Summary
   const passedCount = checks.filter(c => c.passed).length;
-  console.log(JSON.stringify({ total: checks.length, passed: passedCount, failed: checks.length - passedCount, checks }, null, 2));
+  console.log(JSON.stringify({ total: checks.length, passed: passedCount, failed: checks.length - passedCount, skipped, checks }, null, 2));
 
   if (passedCount !== checks.length) {
     process.exitCode = 1;
   } else {
-    console.log('\n🎉 ALL 8 PRIORITIZED BUGS ARE CONFIRMED FIXED!');
+    console.log(`\n${passedCount} applicable regression checks passed; ${skipped.length} legacy test group skipped.`);
   }
 })();

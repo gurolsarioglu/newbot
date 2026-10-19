@@ -6,12 +6,27 @@ const express = require('express');
 const https   = require('https');
 const path    = require('path');
 const fs      = require('fs');
-const { exec, spawn } = require('child_process');
+const { spawn } = require('child_process');
 
 const app  = express();
 const PORT = process.env.TERMINAL_PORT || 3000;
+const HOST = process.env.TERMINAL_HOST || '127.0.0.1';
 
 // ─── Middleware & Static Files ──────────────────────────────────
+app.use('/api', (req, res, next) => {
+  const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]', HOST]);
+  try {
+    const requestUrl = new URL(`http://${req.headers.host}`);
+    if (!allowedHosts.has(requestUrl.hostname)) return res.status(403).json({ error: 'Yerel erisim gerekli' });
+    if (req.headers.origin && new URL(req.headers.origin).host !== requestUrl.host) {
+      return res.status(403).json({ error: 'Farkli kaynaktan API erisimi engellendi' });
+    }
+    if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: 'Farkli kaynaktan API erisimi engellendi' });
+  } catch {
+    return res.status(403).json({ error: 'Gecersiz istek kaynagi' });
+  }
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -26,26 +41,35 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 // ─── Binance CORS Proxy ──────────────────────────────────────
 function proxyRequest(targetUrl, res) {
-  const options = { headers: { 'User-Agent': 'AlphaTerminal/2.0', 'Accept': 'application/json' } };
-  https.get(targetUrl, options, (apiRes) => {
+  const options = { timeout: 10000, headers: { 'User-Agent': 'AlphaTerminal/2.0', 'Accept': 'application/json' } };
+  const request = https.get(targetUrl, options, (apiRes) => {
     res.status(apiRes.statusCode).set('Content-Type', 'application/json');
+    apiRes.on('error', () => res.destroy());
     apiRes.pipe(res);
   }).on('error', (err) => {
     console.error('[Proxy] Hata:', err.message);
+    if (res.headersSent) return res.destroy();
     res.status(502).json({ error: 'Upstream baglanti hatasi' });
   });
+  request.on('timeout', () => request.destroy(new Error('Binance timeout')));
 }
 
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
-    const options = { headers: { 'User-Agent': 'AlphaTerminal/2.0', 'Accept': 'application/json' } };
-    https.get(url, options, (res) => {
+    const options = { timeout: 10000, headers: { 'User-Agent': 'AlphaTerminal/2.0', 'Accept': 'application/json' } };
+    const request = https.get(url, options, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume();
+        return reject(new Error(`Binance HTTP ${res.statusCode}`));
+      }
       let data = '';
       res.on('data', chunk => data += chunk);
+      res.on('error', reject);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); } catch (err) { reject(err); }
       });
     }).on('error', reject);
+    request.on('timeout', () => request.destroy(new Error('Binance timeout')));
   });
 }
 
@@ -54,7 +78,6 @@ const ledgerService = require('./services/treasury-ledger.service');
 const binanceAccountService = require('./services/binance-account.service');
 
 // SymbolRegistry Başlat
-symbolRegistryService.init();
 
 // ─── /api/exchange-info (Official tickSize, decimals, minMove) ──
 app.get('/api/exchange-info', (req, res) => {
@@ -63,26 +86,22 @@ app.get('/api/exchange-info', (req, res) => {
 
 // ─── Cache Containers ─────────────────────────────────────────
 let watchlistCache = { data: null, ts: 0 };
+let watchlistPending = null;
 const sentimentCache = new Map();
 
 // ─── /api/watchlist (700+ Coin Tickers + Funding Rates) ─────────
-app.get('/api/watchlist', async (req, res) => {
-  const now = Date.now();
-  if (watchlistCache.data && (now - watchlistCache.ts < 1500)) {
-    return res.json(watchlistCache.data);
-  }
-
-  try {
+async function fetchWatchlistSnapshot() {
     const [tickers, premium] = await Promise.all([
       fetchJson('https://fapi.binance.com/fapi/v1/ticker/24hr'),
       fetchJson('https://fapi.binance.com/fapi/v1/premiumIndex')
     ]);
 
+    if (!Array.isArray(tickers) || !Array.isArray(premium)) throw new Error('Gecersiz Binance watchlist yaniti');
     const premiumMap = new Map();
     if (Array.isArray(premium)) {
       premium.forEach(p => {
         premiumMap.set(p.symbol, {
-          fundingRate: parseFloat(p.lastFundingRate || 0),
+          fundingRate: Number.isFinite(Number(p.lastFundingRate)) && p.lastFundingRate != null ? Number(p.lastFundingRate) : null,
           nextFundingTime: p.nextFundingTime
         });
       });
@@ -92,7 +111,7 @@ app.get('/api/watchlist', async (req, res) => {
     if (Array.isArray(tickers)) {
       tickers.forEach(t => {
         if (!t.symbol.endsWith('USDT')) return;
-        const prem = premiumMap.get(t.symbol) || { fundingRate: 0.0001, nextFundingTime: Date.now() + 14400000 };
+        const prem = premiumMap.get(t.symbol) || { fundingRate: null, nextFundingTime: null };
         const price = parseFloat(t.lastPrice || 0);
         const chg = parseFloat(t.priceChange || 0);
         const chgPct = parseFloat(t.priceChangePercent || 0);
@@ -108,7 +127,7 @@ app.get('/api/watchlist', async (req, res) => {
           chgPct,
           volUsd,
           fr: prem.fundingRate,
-          frInterval: '8h',
+          frInterval: null,
           nextFundingTime: prem.nextFundingTime,
           high: t.highPrice ? String(t.highPrice) : (t.highPrice || 0),
           low: t.lowPrice ? String(t.lowPrice) : (t.lowPrice || 0)
@@ -117,8 +136,24 @@ app.get('/api/watchlist', async (req, res) => {
     }
 
     result.sort((a, b) => b.volUsd - a.volUsd);
-    watchlistCache = { data: result, ts: now };
-    res.json(result);
+    return result;
+}
+
+app.get('/api/watchlist', async (req, res) => {
+  if (watchlistCache.data && Date.now() - watchlistCache.ts < 15000) {
+    return res.json(watchlistCache.data);
+  }
+  try {
+    if (!watchlistPending) {
+      // Çoklu pencere aynı ağır all-ticker isteğini paylaşır; canlı fiyatlar WS'den gelir.
+      watchlistPending = fetchWatchlistSnapshot()
+        .then(data => {
+          watchlistCache = { data, ts: Date.now() };
+          return data;
+        })
+        .finally(() => { watchlistPending = null; });
+    }
+    res.json(await watchlistPending);
   } catch (err) {
     console.error('[Watchlist Error]:', err.message);
     if (watchlistCache.data) return res.json(watchlistCache.data);
@@ -128,7 +163,8 @@ app.get('/api/watchlist', async (req, res) => {
 
 // ─── /api/sentiment (Order Book, Top Position, Top Account, Market Exposure) ─
 app.get('/api/sentiment', async (req, res) => {
-  const symbol = (req.query.symbol || 'BTCUSDT').toUpperCase();
+  const symbol = String(req.query.symbol || 'BTCUSDT').trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,30}USDT$/.test(symbol)) return res.status(400).json({ error: 'Gecersiz sembol' });
   const now = Date.now();
   const cached = sentimentCache.get(symbol);
   if (cached && (now - cached.ts < 4000)) {
@@ -144,7 +180,7 @@ app.get('/api/sentiment', async (req, res) => {
     ]);
 
     // 1. Order book
-    let orderBook = { bidPct: 41.06, askPct: 58.94 };
+    let orderBook = { bidPct: null, askPct: null };
     if (depth.status === 'fulfilled' && depth.value && depth.value.bids && depth.value.asks) {
       const bidVol = depth.value.bids.reduce((a, b) => a + parseFloat(b[1]), 0);
       const askVol = depth.value.asks.reduce((a, b) => a + parseFloat(b[1]), 0);
@@ -156,21 +192,21 @@ app.get('/api/sentiment', async (req, res) => {
     }
 
     // 2. Top Position
-    let topPosition = { longPct: 67.25, shortPct: 32.75 };
+    let topPosition = { longPct: null, shortPct: null };
     if (posRatio.status === 'fulfilled' && Array.isArray(posRatio.value) && posRatio.value[0]) {
       const lp = parseFloat(posRatio.value[0].longAccount) * 100;
       topPosition = { longPct: parseFloat(lp.toFixed(2)), shortPct: parseFloat((100 - lp).toFixed(2)) };
     }
 
     // 3. Top Account
-    let topAccount = { longPct: 34.05, shortPct: 65.95 };
+    let topAccount = { longPct: null, shortPct: null };
     if (accRatio.status === 'fulfilled' && Array.isArray(accRatio.value) && accRatio.value[0]) {
       const lp = parseFloat(accRatio.value[0].longAccount) * 100;
       topAccount = { longPct: parseFloat(lp.toFixed(2)), shortPct: parseFloat((100 - lp).toFixed(2)) };
     }
 
     // 4. Global Market Exposure
-    let globalExposure = { longPct: 37.88, shortPct: 62.12 };
+    let globalExposure = { longPct: null, shortPct: null };
     if (globRatio.status === 'fulfilled' && Array.isArray(globRatio.value) && globRatio.value[0]) {
       const lp = parseFloat(globRatio.value[0].longAccount) * 100;
       globalExposure = { longPct: parseFloat(lp.toFixed(2)), shortPct: parseFloat((100 - lp).toFixed(2)) };
@@ -185,6 +221,7 @@ app.get('/api/sentiment', async (req, res) => {
       updatedAt: now
     };
 
+    if (sentimentCache.size >= 1000) sentimentCache.delete(sentimentCache.keys().next().value);
     sentimentCache.set(symbol, { data: payload, ts: now });
     res.json(payload);
   } catch (err) {
@@ -249,7 +286,7 @@ app.post('/api/ledger/trades', (req, res) => {
     const trade = ledgerService.addTrade(req.body);
     res.json({ success: true, trade, stats: ledgerService.getStats() });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -259,7 +296,7 @@ app.put('/api/ledger/trades/:id', (req, res) => {
     if (!trade) return res.status(404).json({ success: false, error: 'Islem bulunamadi' });
     res.json({ success: true, trade, stats: ledgerService.getStats() });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -300,7 +337,7 @@ app.post('/api/binance-read/config', async (req, res) => {
 app.post('/api/binance-read/sync', async (req, res) => {
   try {
     const syncRes = await binanceAccountService.syncClosedTradesToLedger();
-    res.json({ success: true, syncRes, ledger: ledgerService.getAll() });
+    res.status(syncRes.success === false ? 502 : 200).json({ success: syncRes.success !== false, syncRes, ledger: ledgerService.getAll() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -373,8 +410,6 @@ app.get('/api/open-app-window', (req, res) => {
   }
 });
 
-// Arka plan Quant piyasa ve sinyal motorunu başlat
-botManager.startBackgroundEngine();
 
 
 // /api/fapi/** -> https://fapi.binance.com/fapi/**
@@ -396,7 +431,10 @@ app.use('/api/data', (req, res) => {
 });
 
 // ─── Baslat ─────────────────────────────────────────────────
-app.listen(PORT, () => {
+function start() {
+  symbolRegistryService.init();
+  botManager.startBackgroundEngine();
+  return app.listen(PORT, HOST, () => {
   console.log('');
   console.log('  ALPHA TERMINAL — HAMMER PRO & M1 PREMIUM');
   console.log('  ------------------------------------------');
@@ -405,4 +443,9 @@ app.listen(PORT, () => {
   console.log('  ------------------------------------------');
   console.log('  Cikmak icin Ctrl+C');
   console.log('');
-});
+  });
+}
+
+app.start = start;
+module.exports = app;
+if (require.main === module) start();

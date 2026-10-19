@@ -92,18 +92,22 @@ const BotHubPlugin = (() => {
     }
   };
 
+  let signalsLoading = false;
   async function fetchSignals() {
+    if (signalsLoading) return;
+    signalsLoading = true;
+    const fetchBot = bot => fetch(`/api/signals?bot=${bot}`).catch(() => ({ ok: false }));
     try {
       const [hRes, hpRes, mRes, aRes, fRes, dRes, vRes, sRes, snRes] = await Promise.all([
-        fetch('/api/signals?bot=hammerpro'),
-        fetch('/api/signals?bot=hammerproplus'),
-        fetch('/api/signals?bot=m1premium'),
-        fetch('/api/signals?bot=m1a'),
-        fetch('/api/signals?bot=fr'),
-        fetch('/api/signals?bot=div'),
-        fetch('/api/signals?bot=v3'),
-        fetch('/api/signals?bot=4s'),
-        fetch('/api/signals?bot=4ssniper')
+        fetchBot('hammerpro'),
+        fetchBot('hammerproplus'),
+        fetchBot('m1premium'),
+        fetchBot('m1a'),
+        fetchBot('fr'),
+        fetchBot('div'),
+        fetchBot('v3'),
+        fetchBot('4s'),
+        fetchBot('4ssniper')
       ]);
 
       if (hRes.ok) {
@@ -146,6 +150,8 @@ const BotHubPlugin = (() => {
       renderFeed();
     } catch (e) {
       console.warn('[BotHub] fetch signals error:', e);
+    } finally {
+      signalsLoading = false;
     }
   }
 
@@ -198,7 +204,9 @@ const BotHubPlugin = (() => {
     }
 
     if (typeof BotRenderer !== 'undefined') {
+      const scrollTop = listEl.scrollTop;
       listEl.innerHTML = BotRenderer.generateSignalsHtml(activeBot, signals);
+      listEl.scrollTop = scrollTop;
     }
   }
 

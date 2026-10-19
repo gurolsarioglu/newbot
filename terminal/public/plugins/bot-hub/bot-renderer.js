@@ -229,8 +229,8 @@ const BotRenderer = (() => {
 
   function formatRsiWithAlert(rsiVal) {
     if (rsiVal === undefined || rsiVal === null || rsiVal === '—') return '—';
-    const str = String(typeof rsiVal === 'object' ? (rsiVal.h1 || rsiVal.m1 || JSON.stringify(rsiVal)) : rsiVal);
-    const num = parseInt(str.replace(/[^\d]/g, ''), 10);
+    const str = String(typeof rsiVal === 'object' ? (rsiVal.m1 ?? rsiVal.h1 ?? '—') : rsiVal);
+    const num = parseFloat(str.replace(/[⚠️!❗]/g, '').trim());
     const hasAlert = str.includes('⚠️') || str.includes('!') || str.includes('❗') || (!isNaN(num) && (num <= 30 || num >= 70));
     const cleanVal = !isNaN(num) ? num : str.replace(/[⚠️!❗]/g, '').trim();
     return `${cleanVal}${hasAlert ? renderWarningBadge() : ''}`;
@@ -329,18 +329,14 @@ const BotRenderer = (() => {
     if (!s) return '';
     const now = new Date();
     const todayStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
-    if (s.dateLabel) {
-      const lbl = String(s.dateLabel).toLowerCase();
-      if (lbl === 'today' || lbl === 'bugün') return 'Bugün';
-    }
     if (s.dateStr) {
       if (s.dateStr === todayStr || s.dateStr.toLowerCase() === 'today' || s.dateStr.toLowerCase() === 'bugün') {
         return 'Bugün';
       }
       if (/^\d{2}\.\d{2}\.\d{4}$/.test(s.dateStr)) return s.dateStr;
     }
-    if (s.timestamp) {
-      const d = new Date(Number(s.timestamp));
+    if (s.timestamp || s.isoDate) {
+      const d = s.timestamp ? new Date(Number(s.timestamp)) : new Date(s.isoDate);
       if (!isNaN(d.getTime())) {
         const dd = String(d.getDate()).padStart(2, '0');
         const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -350,6 +346,7 @@ const BotRenderer = (() => {
         return dStr;
       }
     }
+    if (s.dateLabel && /^\d{2}\.\d{2}\.\d{4}$/.test(s.dateLabel)) return s.dateLabel;
     return 'Bugün';
   }
 
@@ -584,7 +581,7 @@ const BotRenderer = (() => {
           lastDate = dateTag;
           html += `<div class="signal-date-divider"><span>${lastDate}</span></div>`;
         }
-        const isSuperSurge = parseFloat(String(s.hacimChange || '').replace(/[^0-9.]/g, '')) >= 80;
+        const isSuperSurge = parseFloat(String(s.hacimChange || '').replace(/[^0-9.+-]/g, '')) >= 80;
 
         html += `
           <div class="signal-card" data-symbol="${s.symbol}">
@@ -749,7 +746,7 @@ const BotRenderer = (() => {
 
         const rsiDisplay = formatRsiWithAlert(s.rsi);
         const stochDisplay = formatStochWithAlert(s.stochastic);
-        const displayTime = s.time || formatSignalDateTime(s);
+        const displayTime = formatSignalDateTime(s);
 
         html += `
           <div class="signal-card" data-symbol="${s.symbol}">
@@ -772,7 +769,7 @@ const BotRenderer = (() => {
             </div>
             <div class="card-field-row">
               <span>Volume:</span>
-              <span class="card-field-val">${typeof s.volume === 'object' && s.volume ? (s.volume.m1 || JSON.stringify(s.volume)) : (s.volume || '—')}</span>
+              <span class="card-field-val">${typeof s.volume === 'object' && s.volume ? (s.volume.m1 ?? '—') : (s.volume ?? '—')}</span>
             </div>
             <div class="card-field-row">
               <span>RSI:</span>

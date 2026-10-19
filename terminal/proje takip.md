@@ -963,3 +963,33 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 - **Doğrulama:** node --check başarılı; canlı karşılaştırma bekleniyor.
 
 - **Zamanlama:** market-data-engine.service.js M1 alarmı ilk eşik geçişinde değil, mumun M1_SCAN_SECOND (varsayılan 45). saniyesinden sonra, mum başına bir kez veriliyor. Visivero'nun gerçek saniyesi ölçülüp kalibre edilecek.
+
+# 📅 19.10.2026 — Kapsamlı Kod Denetimi, Gerçek Mum Hacmi ve 117 Kontrol
+
+## Konuşmalarımız ve Onaylananlar
+- Kullanıcı proje takip notlarından projenin anlaşılmasını, özellikle hacim sorununun çözülmesini ve bütün projenin kapsamlı test edilip hatalı/amaca aykırı kodlarının düzeltilmesini istedi.
+- Bağımsız Binance verisi, gerçek gözlemden sinyal üretimi, fiyat hassasiyeti, sade kasa ve kayıtların korunması esas alındı.
+
+## Yaptıklarımız
+- M1 fiyatı/hacmi aynı `kline_1m` WebSocket mesajında sabitlendi. 24 saatlik kayan ticker hacmi farkı 1m hacmi olarak kullanılmıyor; gecikmeli REST hacmi alarm anını değiştirmiyor. Önceki mum `openTime` ile eşleşiyor.
+- M1 hacmi `(anlık mum USDT hacmi / önceki tamamlanmış mum USDT hacmi - 1) × 100`; V3 gerçek önceki 20 mum USDT ortalamasını kullanıyor. Dakika sınırı, açılış fiyat boşluğu ve sıra dışı gelen mesajlar düzeltildi.
+- Rastgele tohum üreticisi, sabit boost/önceki fiyat/RSI/SRSI/balina oranı/fonlama geçmişi/geri sayım kaldırıldı. Eksik veya tanımsız metrikler `null`/`—` kalıyor; 0 değerler korunuyor.
+- Yapısal botlar güncellenen 250 kapalı mumla kendi gerçek zaman dilimlerinde değerlendirilir. Günlük pivot önceki tamamlanmış UTC günden hesaplanır; DIV/Hammer gereksiz 250 günlük veri koşuluyla elenmez. Pivot teyidi her mumda tekrarlanmaz.
+- REST warm-up birleşimi, tampon yenileme/boşluk onarımı, rate-limit retry/timeout, yeniden başlatmada listener/mum/rawId dedup ve durdurulmuş asenkron işlerin sinyal yazması düzeltildi.
+- Arşiv retention/indeks/disk kaydı, kasa atomik batch yazımı/rollback, bozuk dosyaları koruma, Binance PnL sayfalaması ve yanlış Long/Short yön çıkarımı düzeltildi.
+- Grafik/bot penceresi yarışları, donmuş göstergeler, ondalıklı RSI/0 hacim/yanlış Bugün etiketi, boş favoriler ve eksik sentiment/funding gösterimleri düzeltildi.
+- Çoklu pencere watchlist istekleri birleştirildi ve 15 saniye REST önbelleği eklendi. Sunucu localhost/Origin/Host kontrolleriyle yerel çalışıyor. `ws` bağımlılığı ve kilit dosyası eklendi; anahtar dosyası Git dışında tutuldu.
+
+## Düşündüklerimiz ve Sınırlar
+- Bir mumun canlı hacmi yalnız aynı mumun borsa verisinden alınabilir. Testler, bilinmeyen veriyi sabit değerle doldurarak başarılı sayılmamalıdır.
+- Mevcut M1 varsayılanı `M1_SCAN_SECOND=45`, eşik %0.70 ve cooldown 45 saniyedir; bu değerler başka bir terminalin kesin zamanlamasının kanıtı değildir.
+- M1 günlük hacmi en az 1 milyon USDT olan tüm görülen sembolleri izler; yapısal havuz en yüksek hacimli 15 semboldür. Bu kapasite sınırı raporda açıklandı.
+- Eski arşiv ve gerçek kasa kayıtları değiştirilmedi. Gerçek hesap anahtarıyla bağlantı ve uzun süreli 7/24 dayanıklılık testi yapılmadı.
+
+## Tamamlanan İşler ve Doğrulama
+- `npm test`: **117/117 kontrol başarılı** (6 regression + 5 followup + 25 strateji/quant + 20 frontend + 24 motor + 29 servis + 8 HTTP).
+- Artık bulunmayan eski arayüzler için sahte fallback PASS kodu kaldırıldı; dört legacy kontrol açıkça atlanıyor ve başarılı toplamına dahil değil.
+- 57 JavaScript dosyasında `node --check` ve `git diff --check` başarılı.
+- `npm run test:live -- --closed-candle`: **başarılı**. Binance resmi kontrat defterinde 525 sembol ve BTC251 mum alındı; aynı tamamlanmış 1m mumun WebSocket `k.q` ve REST `[7]` USDT hacmi eşleşti (`closedQuoteVolumeMatch: true`). Test hesap anahtarı veya gerçek kayıt dosyası kullanmadı.
+- Ayrıntılı kapsam/test/sınır raporu: `review/2026-10-19-comprehensive-audit.md`.
+- Git durumu: Bu çalışma sırasında `git remote -v` boş; GitHub hedefi tanımlı olmadığından push yapılamıyor. Yerel commit sonucu çalışma tesliminde belirtilecek.

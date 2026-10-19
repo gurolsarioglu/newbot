@@ -6,7 +6,28 @@
 const fs = require('fs');
 const path = require('path');
 
-const LEDGER_FILE = path.join(__dirname, '..', 'data', 'treasury_ledger.json');
+const LEDGER_FILE = path.join(process.env.TERMINAL_DATA_DIR || path.join(__dirname, '..', 'data'), 'treasury_ledger.json');
+
+function invalidTrade(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function money(value) {
+  if (value === '' || value === null || value === undefined || !Number.isFinite(Number(value))) {
+    throw invalidTrade('Gecerli bir kar/zarar tutari girilmelidir');
+  }
+  return +Number(value).toFixed(2);
+}
+
+function normalizeSide(value, source) {
+  const side = String(value ?? (source === 'binance' ? '—' : 'L')).toUpperCase();
+  if (side === 'L' || side === 'LONG') return 'L';
+  if (side === 'S' || side === 'SHORT') return 'S';
+  if (side === '—') return side;
+  throw invalidTrade('Islem yonu L veya S olmalidir');
+}
 
 // Kullanıcının Excel tablosundan birebir aktarılan başlangıç geçmişi (30 Gerçek İşlem)
 const DEFAULT_EXCEL_TRADES = [
@@ -56,28 +77,36 @@ class TreasuryLedgerService {
         const raw = fs.readFileSync(LEDGER_FILE, 'utf8');
         const data = JSON.parse(raw);
         this.initialCapital = parseFloat(data.initialCapital) || 10.00;
-        this.trades = Array.isArray(data.trades) && data.trades.length > 0 ? data.trades : [...DEFAULT_EXCEL_TRADES];
+        if (!Array.isArray(data.trades)) throw new Error('Gecersiz kasa dosyasi');
+        this.trades = data.trades;
       } else {
-        this.trades = [...DEFAULT_EXCEL_TRADES];
+        this.trades = structuredClone(DEFAULT_EXCEL_TRADES);
         this._save();
       }
     } catch (e) {
       console.warn('[TreasuryLedger] Dosya yuklenirken hata, varsayilan Excel yuklendi:', e.message);
-      this.trades = [...DEFAULT_EXCEL_TRADES];
+      this.trades = structuredClone(DEFAULT_EXCEL_TRADES);
+      // Hasarlı kullanıcı dosyasının bir sonraki işlemde üstüne yazılmasını önle.
+      this.loadError = e;
     }
     this._recalculateChain();
   }
 
   _save() {
+    if (this.loadError) throw new Error('Kasa dosyasi okunamadi; mevcut dosya korunuyor');
     try {
       const data = {
         initialCapital: this.initialCapital,
         updatedAt: new Date().toISOString(),
         trades: this.trades
       };
-      fs.writeFileSync(LEDGER_FILE, JSON.stringify(data, null, 2), 'utf8');
+      fs.mkdirSync(path.dirname(LEDGER_FILE), { recursive: true });
+      const tempFile = `${LEDGER_FILE}.tmp`;
+      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tempFile, LEDGER_FILE);
     } catch (e) {
       console.error('[TreasuryLedger] Kaydetme hatasi:', e.message);
+      throw e;
     }
   }
 
@@ -135,19 +164,41 @@ class TreasuryLedgerService {
     };
   }
 
-  addTrade(trade) {
+  _commit(trades, initialCapital = this.initialCapital) {
+    const previousTrades = this.trades;
+    const previousCapital = this.initialCapital;
+    this.trades = structuredClone(trades);
+    this.initialCapital = initialCapital;
+    try {
+      this._recalculateChain();
+      this._save();
+    } catch (error) {
+      this.trades = previousTrades;
+      this.initialCapital = previousCapital;
+      throw error;
+    }
+  }
+
+  _createTrade(trade) {
+    if (!trade || typeof trade !== 'object' || Array.isArray(trade)) throw invalidTrade('Gecersiz islem');
+    const symbolInput = String(trade.symbol || trade.coin || '').trim().toUpperCase().replace(/\//g, '');
+    if (!/^[A-Z0-9]{1,30}$/.test(symbolInput)) throw invalidTrade('Gecerli bir coin veya sembol girilmelidir');
+    const symbol = symbolInput.endsWith('USDT') ? symbolInput : `${symbolInput}USDT`;
+    const profitUsd = money(trade.profitUsd);
+    const side = normalizeSide(trade.side, trade.source);
+    if (trade.id && this.trades.some(t => t.id === trade.id)) throw invalidTrade('Islem kimligi zaten kayitli');
     const now = new Date();
     const dateStr = trade.date || now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const timeStr = trade.time || now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const newTrade = {
+    return {
       id: trade.id || `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      coin: (trade.coin || trade.symbol || 'COIN').toUpperCase().replace('USDT', ''),
-      symbol: (trade.symbol || `${trade.coin}USDT`).toUpperCase(),
+      coin: symbol.replace(/USDT$/, ''),
+      symbol,
       date: dateStr,
       time: timeStr,
-      side: (trade.side || 'L').toUpperCase().startsWith('S') ? 'S' : 'L',
-      profitUsd: +(parseFloat(trade.profitUsd) || 0).toFixed(2),
+      side,
+      profitUsd,
       runningBalance: 0, // _recalculateChain ile atanır
       returnPct: 0,      // _recalculateChain ile atanır
       notes: trade.notes || '',
@@ -156,59 +207,73 @@ class TreasuryLedgerService {
       timestamp: trade.timestamp || Date.now()
     };
 
-    this.trades.push(newTrade);
-    this._recalculateChain();
-    this._save();
-    return newTrade;
+  }
+
+  addTrade(trade) {
+    const newTrade = this._createTrade(trade);
+    this._commit([...this.trades, newTrade]);
+    return this.trades[this.trades.length - 1];
+  }
+
+  addTrades(trades) {
+    const additions = trades.map(trade => this._createTrade(trade));
+    const ids = new Set(this.trades.map(trade => trade.id));
+    for (const trade of additions) {
+      if (ids.has(trade.id)) throw invalidTrade('Islem kimligi zaten kayitli');
+      ids.add(trade.id);
+    }
+    if (additions.length) this._commit([...this.trades, ...additions]);
+    return additions.length;
   }
 
   updateTrade(id, updates) {
     const idx = this.trades.findIndex(t => t.id === id);
     if (idx === -1) return null;
+    if (id === 't_00' && (updates.profitUsd !== undefined || updates.coin || updates.side)) {
+      throw invalidTrade('Baslangic satirinin tutari veya sembolu degistirilemez');
+    }
+    const profitUsd = updates.profitUsd !== undefined ? money(updates.profitUsd) : undefined;
+    const side = updates.side ? normalizeSide(updates.side) : undefined;
+    const nextTrades = structuredClone(this.trades);
 
-    if (updates.coin) this.trades[idx].coin = updates.coin.toUpperCase().replace('USDT', '');
-    if (updates.side) this.trades[idx].side = updates.side.toUpperCase().startsWith('S') ? 'S' : 'L';
-    if (updates.profitUsd !== undefined) this.trades[idx].profitUsd = +(parseFloat(updates.profitUsd) || 0).toFixed(2);
-    if (updates.notes !== undefined) this.trades[idx].notes = updates.notes;
-    if (updates.date) this.trades[idx].date = updates.date;
-    if (updates.time) this.trades[idx].time = updates.time;
+    if (updates.coin) {
+      const coin = String(updates.coin).toUpperCase().trim().replace(/USDT$/, '');
+      if (!/^[A-Z0-9]{1,30}$/.test(coin)) throw invalidTrade('Gecersiz coin');
+      nextTrades[idx].coin = coin;
+      nextTrades[idx].symbol = `${coin}USDT`;
+    }
+    if (side) nextTrades[idx].side = side;
+    if (profitUsd !== undefined) nextTrades[idx].profitUsd = profitUsd;
+    if (updates.notes !== undefined) nextTrades[idx].notes = updates.notes;
+    if (updates.date) nextTrades[idx].date = updates.date;
+    if (updates.time) nextTrades[idx].time = updates.time;
 
-    this._recalculateChain();
-    this._save();
+    this._commit(nextTrades);
     return this.trades[idx];
   }
 
   deleteTrade(id) {
     if (id === 't_00') return false; // Başlangıç satırı silinemez
     const before = this.trades.length;
-    this.trades = this.trades.filter(t => t.id !== id);
-    if (this.trades.length < before) {
-      this._recalculateChain();
-      this._save();
+    const nextTrades = this.trades.filter(t => t.id !== id);
+    if (nextTrades.length < before) {
+      this._commit(nextTrades);
       return true;
     }
     return false;
   }
 
   setInitialCapital(amount) {
-    const val = parseFloat(amount);
-    if (!isNaN(val) && val > 0) {
-      this.initialCapital = +val.toFixed(2);
-      if (this.trades.length > 0 && this.trades[0].id === 't_00') {
-        this.trades[0].runningBalance = this.initialCapital;
-      }
-      this._recalculateChain();
-      this._save();
+    const val = Number(amount);
+    if (Number.isFinite(val) && val >= 0.01) {
+      this._commit(this.trades, +val.toFixed(2));
       return true;
     }
     return false;
   }
 
   resetToDefault() {
-    this.initialCapital = 10.00;
-    this.trades = JSON.parse(JSON.stringify(DEFAULT_EXCEL_TRADES));
-    this._recalculateChain();
-    this._save();
+    this._commit(DEFAULT_EXCEL_TRADES, 10.00);
     return this.getAll();
   }
 }

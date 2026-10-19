@@ -10,13 +10,14 @@
  */
 
 const signalStoreService = require('../../services/signal-store.service');
+const { randomUUID } = require('node:crypto');
 
 class BaseBot {
   constructor(options = {}) {
     this.id = (options.id || 'base_bot').toLowerCase();
     this.name = options.name || 'Base Bot';
     this.description = options.description || '';
-    this.maxSignals = options.maxSignals || 100;
+    this.maxSignals = Number.isInteger(options.maxSignals) && options.maxSignals > 0 ? options.maxSignals : 100;
 
     // Tekilleştirme ve Cooldown Takipçileri
     this.lastEmitMap = new Map(); // symbol -> timestamp
@@ -29,6 +30,44 @@ class BaseBot {
     } else {
       this.signals = [];
     }
+    // Yeniden başlatma aynı arşivlenmiş mumun tekrar yayınlanmasına izin vermemeli.
+    for (const signal of this.signals) {
+      for (const key of this.signalKeys(signal)) this.seenCandles.add(key);
+      const symbol = String(signal.symbol || signal.coin || '').trim().toUpperCase();
+      const timestamp = Number(signal.timestamp);
+      if (symbol && Number.isFinite(timestamp)) {
+        this.lastEmitMap.set(symbol, Math.max(this.lastEmitMap.get(symbol) || 0, Math.min(Date.now(), timestamp)));
+      }
+    }
+  }
+
+  signalKeys(signal) {
+    const symbol = String(signal.symbol || signal.coin || '').trim().toUpperCase();
+    const keys = [];
+    if (signal.id) keys.push(`${this.id}_id_${signal.id}`);
+    if (signal.rawId !== undefined && signal.rawId !== null && signal.rawId !== '') keys.push(`${this.id}_raw_${signal.rawId}`);
+    if (signal.candleOpenTime !== undefined && signal.candleOpenTime !== null) {
+      keys.push(`${this.id}_${symbol}_${signal.timeframe || ''}_${signal.candleOpenTime}`);
+    }
+    return keys;
+  }
+
+  parseMetric(value, min = -Infinity, max = Infinity) {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.').replace(/[%\s]/g, ''));
+    return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : null;
+  }
+
+  formatMetric(value, alarm = false) {
+    return value === null || !Number.isFinite(value) ? '—' : `${value}${alarm ? ' ❗' : ''}`;
+  }
+
+  signalMetadata(source) {
+    const metadata = {};
+    for (const key of ['id', 'rawId', 'timeframe', 'candleOpenTime', 'timestamp', 'isoDate', 'dateStr', 'dateLabel', 'time']) {
+      if (source[key] !== undefined && source[key] !== null) metadata[key] = source[key];
+    }
+    return metadata;
   }
 
   /**
@@ -45,7 +84,7 @@ class BaseBot {
     const now = Date.now();
 
     // 1. Aynı mum açılış zamanı kontrolü
-    if (candleOpenTime) {
+    if (candleOpenTime !== undefined && candleOpenTime !== null) {
       const candleKey = `${this.id}_${cleanSym}_${timeframe}_${candleOpenTime}`;
       if (this.seenCandles.has(candleKey)) {
         return false;
@@ -82,18 +121,18 @@ class BaseBot {
    * ve anında 60 günlük kalıcı depoya (data/signals_history.json) kaydeder.
    */
   addSignal(signal) {
-    if (!signal) return null;
+    if (!signal || typeof signal !== 'object') return null;
 
-    const sym = (signal.symbol || signal.coin || 'UNKNOWN').toUpperCase();
-    const tf = signal.timeframe || '';
-    const candleTime = signal.candleOpenTime || null;
+    const sym = String(signal.symbol || signal.coin || '').trim().toUpperCase();
+    if (!sym) return null;
+    const now = Date.now();
+    const timestamp = signal.timestamp === undefined || signal.timestamp === null ? now : Number(signal.timestamp);
+    if (!Number.isFinite(timestamp) || !Number.isFinite(new Date(timestamp).getTime())) return null;
 
     // Mum Bazlı veya Mesaj Kimliği Bazlı Tekilleştirme Kontrolü
-    const signalKey = signal.rawId ? `${this.id}_raw_${signal.rawId}` : (candleTime ? `${this.id}_${sym}_${tf}_${candleTime}` : null);
-    if (signalKey) {
-      if (this.seenCandles.has(signalKey)) {
-        return null; // Mükerrer sinyal reddedildi
-      }
+    const signalKeys = this.signalKeys({ ...signal, symbol: sym });
+    if (signalKeys.some(key => this.seenCandles.has(key))) return null;
+    for (const signalKey of signalKeys) {
       this.seenCandles.add(signalKey);
 
       // Bellek koruması (Maksimum 5000 anahtar)
@@ -104,26 +143,21 @@ class BaseBot {
     }
 
     // Cooldown zamanını kaydet
-    const now = Date.now();
     this.lastEmitMap.set(sym, now);
 
-    const dateObj = new Date(signal.timestamp || now);
-    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const dateObj = new Date(timestamp);
+    const dateStr = dateObj.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nowTime = dateObj.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' });
     const formatted = {
-      id: signal.id || `${this.id}_${now}_${Math.floor(Math.random() * 1000)}`,
-      timestamp: signal.timestamp || now,
-      isoDate: signal.isoDate || dateObj.toISOString(),
-      dateStr: signal.dateStr || dateStr,
-      symbol: sym,
+      ...signal,
+      id: signal.id || `${this.id}_${randomUUID()}`,
       dateLabel: signal.dateLabel || dateStr,
-      time: signal.time || nowTime,
-      ...signal
+      symbol: sym,
+      timestamp,
+      isoDate: dateObj.toISOString(),
+      dateStr,
+      time: nowTime
     };
-
-    if (!formatted.dateStr) formatted.dateStr = dateStr;
-    if (!formatted.time) formatted.time = nowTime;
-    if (!formatted.timestamp) formatted.timestamp = now;
 
     // 1. Bellek havuzuna ekle
     this.signals.unshift(formatted);

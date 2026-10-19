@@ -1,811 +1,201 @@
-/**
- * bots/index.js — Bot Manager & Registry (Quant Engine Integration)
- * 
- * 9 Büyük Botu merkezi kayıt mekanizmasında (Registry) toplar,
- * MarketDataEngine ve QuantIndicatorsService ile tam deterministik,
- * matematiksel eşiklere ve mum kapanışlarına bağlı olarak çalıştırır.
- * 
- * Kesin Quant Standartları:
- * - Sahte tohumlama ve periyodik suni sinyal döngüleri tamamen kaldırılmıştır.
- * - Gerçek zamanlı WebSocket radar olayları ve 250 mumluk RingBuffer verileriyle sinyal üretilir.
- */
-
-const hammerProPlusBot = require('./strategies/hammer-pro-plus.bot');
-const hammerProBot     = require('./strategies/hammer-pro.bot');
-const fourSSniperBot   = require('./strategies/four-s-sniper.bot');
-const fourSBot         = require('./strategies/four-s.bot');
-const v3VolumeBot      = require('./strategies/v3-volume.bot');
-const divergenceBot    = require('./strategies/divergence.bot');
-const fundingRateBot   = require('./strategies/funding-rate.bot');
-const m1aDropBot       = require('./strategies/m1a-drop.bot');
-const m1PremiumBot     = require('./strategies/m1-premium.bot');
-
-const { formatCryptoPrice, computePrevPrice } = require('../services/price-formatter');
-const marketDataEngine  = require('../services/market-data-engine.service');
-const quantIndicators   = require('../services/quant-indicators.service');
-const derivativesEnricher = require('../services/derivatives-enricher.service');
-const symbolRegistry    = require('../services/symbol-registry.service');
+/** Local Binance strategies. Missing observations never become estimated metrics. */
+const marketDataEngine = require('../services/market-data-engine.service');
+const quant = require('../services/quant-indicators.service');
+const derivatives = require('../services/derivatives-enricher.service');
+const { formatCryptoPrice } = require('../services/price-formatter');
+const BOT_DEFINITIONS = [
+  ['hammerproplus', './strategies/hammer-pro-plus.bot', ['hammerpro+', 'hammer-pro-plus', 'proplus', '15m']],
+  ['hammerpro', './strategies/hammer-pro.bot', ['hammer-pro', 'hammer']],
+  ['4ssniper', './strategies/four-s-sniper.bot', ['4s-sniper', 'sniper', '4ss']],
+  ['4s', './strategies/four-s.bot', ['four_s', '4-s', '4spro']],
+  ['v3', './strategies/v3-volume.bot', ['v3-a', 'v3a', 'volume']],
+  ['div', './strategies/divergence.bot', ['divergence', '1g', '1gpro']],
+  ['fr', './strategies/funding-rate.bot', ['funding', 'fundingrate', 'funding-rate']],
+  ['m1a', './strategies/m1a-drop.bot', ['m1', 'm1-a', 'ma-1', 'm1adrop', 'drop']],
+  ['m1premium', './strategies/m1-premium.bot', ['m1p', 'm1-premium', 'premium', 'm1_premium']]
+];
 
 class BotManager {
   constructor() {
-    this.bots = new Map();
-    this.aliasMap = new Map();
-    this.isEngineRunning = false;
-    this.structureScanTimer = null;
-
-    // 9 Bot Kaydı
-    this.register('hammerproplus', hammerProPlusBot, ['hammerpro+', 'hammer-pro-plus', 'proplus']);
-    this.register('hammerpro', hammerProBot, ['hammer-pro', 'hammer']);
-    this.register('4ssniper', fourSSniperBot, ['4s-sniper', 'sniper', '4ss']);
-    this.register('4s', fourSBot, ['four_s', '4-s']);
-    this.register('v3', v3VolumeBot, ['v3-a', 'v3a', 'volume']);
-    this.register('div', divergenceBot, ['divergence']);
-    this.register('fr', fundingRateBot, ['funding', 'fundingrate', 'funding-rate']);
-    this.register('m1a', m1aDropBot, ['m1-a', 'ma-1', 'm1adrop', 'drop']);
-    this.register('m1premium', m1PremiumBot, ['m1p', 'm1-premium', 'premium', 'm1_premium']);
+    this.bots = new Map(); this.aliasMap = new Map();
+    this.isEngineRunning = false; this.structureScanTimer = null;
+    this.pendingRadar = new Map(); this.scanRunning = false; this.generation = 0;
+    for (const [id, file, aliases] of BOT_DEFINITIONS) this.register(id, require(file), aliases);
   }
-
-  register(id, botInstance, aliases = []) {
-    this.bots.set(id, botInstance);
-    this.aliasMap.set(id, id);
-    aliases.forEach(alias => this.aliasMap.set(alias.toLowerCase(), id));
+  register(id, bot, aliases = []) { this.bots.set(id, bot); [id, ...aliases].forEach(alias => this.aliasMap.set(alias, id)); }
+  getBot(identifier) { return this.bots.get(this.aliasMap.get(String(identifier || 'hammerproplus').toLowerCase().trim())) || null; }
+  getAllBots() { return [...this.bots.values()]; }
+  emitSignal(data) {
+    if (!data || typeof data !== 'object' || typeof (data.symbol || data.coin) !== 'string') throw new Error('Gecersiz sinyal verisi');
+    const symbol = (data.symbol || data.coin).trim().toUpperCase();
+    if (!/^[A-Z0-9_]+USDT$/.test(symbol)) throw new Error('Gecersiz sembol');
+    const bot = this.getBot(data.botId || data.botType);
+    if (!bot) throw new Error('Bilinmeyen bot');
+    const signal = bot.ingest({ ...data, symbol, coin: symbol });
+    return { symbol, affectedBots: signal ? [bot.id] : [], time: new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' }) };
   }
-
-  getBot(identifier) {
-    if (!identifier) return this.bots.get('hammerproplus');
-    const normalized = String(identifier).toLowerCase().trim();
-    const primaryId = this.aliasMap.get(normalized) || normalized;
-    return this.bots.get(primaryId) || this.bots.get('hammerproplus');
-  }
-
-  getAllBots() {
-    return Array.from(this.bots.values());
-  }
-
-  /**
-   * Harici Hunter botlarından (POST /api/signals/emit) gelen sinyalleri doğrular ve yönlendirir
-   */
-  emitSignal(signalData) {
-    if (!signalData || (!signalData.coin && !signalData.symbol)) {
-      throw new Error('Gecersiz sinyal verisi');
-    }
-
-    const rawSym = (signalData.coin || signalData.symbol).toUpperCase();
-    const symbol = rawSym;
-    const botType = (signalData.botType || '').toLowerCase();
-    const timeframe = (signalData.timeframe || '').toLowerCase();
-    const affectedBots = [];
-
-    // Fiyatı SymbolRegistry ile resmi tickSize'a formatla
-    if (signalData.price) {
-      signalData.price = formatCryptoPrice(signalData.price, symbol);
-    }
-
-    // 1. 4S / 4Spro / 4S Sniper
-    if (botType.includes('4s') || botType.includes('sniper') || timeframe === '4h') {
-      const isSniper = signalData.strategy === 'NW UP' || botType.includes('sniper');
-      if (isSniper) {
-        fourSSniperBot.ingest(signalData);
-        affectedBots.push('4ssniper');
-      } else {
-        fourSBot.ingest(signalData);
-        affectedBots.push('4s');
-      }
-    }
-
-    // 2. Divergence
-    if (
-      signalData.rsi1hDiv ||
-      signalData.rsi4hDiv ||
-      signalData.rsi1dDiv ||
-      signalData.rsi1wDiv ||
-      botType.includes('1gpro') ||
-      botType.includes('div') ||
-      (signalData.strategy && signalData.strategy.includes('DIVERGENCE'))
-    ) {
-      divergenceBot.ingest(signalData);
-      affectedBots.push('div');
-    }
-
-    // 3. 15m Hunter / Hammer Pro / Hammer Pro Plus / M1A
-    if (
-      botType.includes('15m') ||
-      timeframe === '15m' ||
-      botType.includes('hammer') ||
-      botType.includes('m1')
-    ) {
-      hammerProPlusBot.ingest(signalData);
-      hammerProBot.ingest(signalData);
-      affectedBots.push('hammerproplus', 'hammerpro');
-
-      if (signalData.position === 'Short' || botType.includes('m1a')) {
-        m1aDropBot.ingest(signalData);
-        affectedBots.push('m1a');
-      }
-      if (signalData.position === 'Long' || botType.includes('m1p')) {
-        m1PremiumBot.ingest(signalData);
-        affectedBots.push('m1premium');
-      }
-    }
-
-    if (affectedBots.length === 0) {
-      hammerProPlusBot.ingest(signalData);
-      affectedBots.push('hammerproplus');
-    }
-
-    return {
-      symbol,
-      affectedBots,
-      time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  /**
-   * Visivero veya dış kaynaklardan gelen sinyalleri ilgili bota hatasız yönlendirir
-   */
-  routeSignal(signalData) {
-    if (!signalData || !signalData.symbol) return;
-    const botId = (signalData.botId || '').toLowerCase();
-    const sym = signalData.symbol.toUpperCase();
-
-    // 1. M1-A ve M1-Premium
-    if (botId === 'm1') {
-      if (signalData.hasDrop || signalData.dropValue || signalData.dot === '🔴') {
-        m1aDropBot.ingest(signalData);
-      } else {
-        m1PremiumBot.ingest(signalData);
-      }
-      return;
-    }
-    if (botId === 'm1-premium' || botId === 'm1premium') {
-      const bNum = parseFloat(String(signalData.boostValue || signalData.boost || '0').replace(/[%+,\s]/g, ''));
-      if (bNum < 0 || signalData.dot === '🔴' || signalData.hasDrop) {
-        m1aDropBot.ingest(signalData);
-      } else {
-        m1PremiumBot.ingest(signalData);
-      }
-      return;
-    }
-
-    // 2. Hammer Pro & Hammer Pro Plus
-    if (botId === 'hammer-pro' || botId === 'hammerpro') {
-      hammerProBot.ingest(signalData);
-      return;
-    }
-    if (botId === 'hammer-pro-plus' || botId === 'hammerproplus') {
-      hammerProPlusBot.ingest(signalData);
-      return;
-    }
-
-    // 3. Divergence
-    if (botId === 'divergence' || botId === 'div') {
-      divergenceBot.ingest(signalData);
-      return;
-    }
-
-    // 4. V3 Hacim
-    if (botId === 'v3' || botId === 'volume') {
-      v3VolumeBot.ingest(signalData);
-      return;
-    }
-
-    // 5. 4S & 4S Sniper
-    if (botId === '4s-sniper' || botId === '4ssniper') {
-      fourSSniperBot.ingest(signalData);
-      return;
-    }
-    if (botId === '4s') {
-      fourSBot.ingest(signalData);
-      return;
-    }
-
-    // 6. Funding Rate
-    if (botId === 'funding-rate' || botId === 'fr') {
-      fundingRateBot.ingest(signalData);
-      return;
-    }
-
-    // Genel Akış Fallback
-    if (signalData.hasDrop) {
-      m1aDropBot.ingest(signalData);
-    } else {
-      m1PremiumBot.ingest(signalData);
-    }
-  }
-
-  /**
-   * %100 Bağımsız Yerel Quant Arka Plan Motorunu Başlatır
-   * Yalnızca Binance Futures WebSocket ve REST akışlarını kullanır. Sıfır harici sunucu bağımlılığı.
-   */
+  routeSignal(data) { return this.emitSignal(data); }
   startBackgroundEngine() {
     if (this.isEngineRunning) return;
     this.isEngineRunning = true;
-
-    console.log('[BotManager] %100 Bagimsiz Yerel Quant Motoru baslatiliyor (Sifir Harici Sunucu)...');
-
-    // 1. Piyasa Veri Motorunu Başlat (Doğrudan Binance Futures WebSocket Radarı)
+    this.generation++;
+    this.radarListener = alert => this._handleRadarAlert(alert).catch(err => console.warn('[BotManager radar]', err.message));
+    this.closedListener = event => { if (['5m', '1h', '4h'].includes(event.interval)) this._scanStructuralSetups().catch(err => console.warn('[BotManager scan]', err.message)); };
+    marketDataEngine.on('radarAlert', this.radarListener);
+    marketDataEngine.on('candleClosed', this.closedListener);
     marketDataEngine.start();
-
-    // 2. Aşama 1: Gerçek Zamanlı Radar Dinleyicisi (Sıfır-REST Hafıza İçi)
-    marketDataEngine.on('radarAlert', async (alert) => {
-      try {
-        await this._handleRadarAlert(alert);
-      } catch (err) {
-        console.warn(`[BotManager Radar Error (${alert.type})]:`, err.message);
-      }
-    });
-
-    // 3. Başlangıç Taraması (3 saniye sonra Binance verileriyle yerel sinyalleri üret)
-    setTimeout(() => {
-      this._scanFundingRates().catch(() => {});
-      // NOT: _seedLocalM1Signals() kaldırıldı — Math.random() ile sahte düşüş/hacim/RSI üretiyordu.
-      this._scanStructuralSetups().catch(e => {
-        console.warn('[BotManager Init Scan Error]:', e.message);
-      });
-    }, 3500);
-
-    // 4. Aşama 2: Yapısal & Mum Kapanış Botları Periyodik Tarayıcısı (Her 45 sn)
+    this.initialScanTimer = setTimeout(() => this._scanStructuralSetups().catch(err => console.warn('[BotManager scan]', err.message)), 3500);
     this.structureScanTimer = setInterval(() => {
-      this._scanStructuralSetups().catch(e => {
-        console.warn('[BotManager Structure Scan Error]:', e.message);
-      });
-      this._scanFundingRates().catch(() => {});
+      this._scanStructuralSetups().catch(err => console.warn('[BotManager scan]', err.message));
+      this._scanFundingRates().catch(err => console.warn('[BotManager funding]', err.message));
     }, 45000);
-    if (this.structureScanTimer.unref) this.structureScanTimer.unref();
+    this.structureScanTimer.unref?.();
   }
-
-  /**
-   * Binance REST Ticker verileriyle başlangıç M1-A ve M1-Premium sinyallerini üretir (%100 Yerel)
-   */
-  _seedLocalM1Signals() {
-    const allTickers = marketDataEngine.getAllTickers();
-    if (!allTickers || allTickers.length === 0) return;
-
-    const now = Date.now();
-    const dateObj = new Date(now);
-    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-    // 1. En çok düşen 15 vadeli coin (M1-A Drop Bot Başlangıç Tohumu)
-    const topDecliners = allTickers
-      .filter(t => t.chg24Pct < 0 && t.volUsd > 1000000)
-      .sort((a, b) => a.chg24Pct - b.chg24Pct)
-      .slice(0, 15);
-
-    topDecliners.forEach(t => {
-      const sym = t.symbol;
-      const dropPct = -Math.abs((Math.random() * 1.5 + 0.85)); // 0.85% - 2.35% gerçekçi 1m mikro düşüş
-      const prevPrice = computePrevPrice(t.priceNum, dropPct, sym);
-      const estRsi = Math.max(8, Math.min(85, Math.round(50 + dropPct * 18)));
-      const estStochK = Math.max(5, Math.min(95, Math.round(50 + dropPct * 22)));
-      const estStochD = Math.max(5, Math.min(95, Math.round(estStochK + 4)));
-      const volDelta = -(Math.random() * 35 + 10).toFixed(2);
-
-      m1aDropBot.addSignal({
-        id: `m1a_${sym}_${now}_seed`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        type: 'drop',
-        dot: '🔴',
-        dropValue: `${dropPct.toFixed(2)}%`,
-        currentPrice: formatCryptoPrice(t.priceNum, sym),
-        prevPrice,
-        volume: `${volDelta}%`,
-        rsi: `${estRsi}${estRsi <= 30 ? ' ⚠️' : ''}`,
-        stochastic: `${estStochK}/${estStochD}${estStochK <= 20 ? ' ⚠️' : ''}`,
-        btcStatus: 'Normal',
-        dateLabel: dateStr,
-        time: nowTime
-      });
-    });
-
-    // 2. En çok yükselen 15 vadeli coin (M1 Premium Sıçrama Başlangıç Tohumu)
-    const topGainers = allTickers
-      .filter(t => t.chg24Pct > 0 && t.volUsd > 1000000)
-      .sort((a, b) => b.chg24Pct - a.chg24Pct)
-      .slice(0, 15);
-
-    topGainers.forEach(t => {
-      const sym = t.symbol;
-      const boostPct = +(Math.random() * 1.8 + 0.70); // +0.70% - +2.50%
-      const prevPrice = computePrevPrice(t.priceNum, boostPct, sym);
-      const estRsi = Math.max(55, Math.min(92, Math.round(50 + boostPct * 14)));
-      const estStochK = Math.max(65, Math.min(98, Math.round(50 + boostPct * 18)));
-      const estStochD = Math.max(50, Math.min(95, Math.round(estStochK - 6)));
-
-      m1PremiumBot.addSignal({
-        id: `m1p_${sym}_${now}_seed`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        dot: '🟢',
-        stars: boostPct >= 1.50 ? '⭐️' : '',
-        boostValue: `+${boostPct.toFixed(2)}%`,
-        currentPrice: formatCryptoPrice(t.priceNum, sym),
-        prevPrice,
-        rsi: {
-          m1: `${estRsi} ❗`,
-          m5: '58',
-          h1: '52'
-        },
-        srsi: {
-          m1: `${estStochK} ❗`,
-          m5: `${estStochD}`,
-          h1: '40'
-        },
-        divergence: boostPct >= 1.20 ? '1m ✅' : undefined,
-        isFavorite: boostPct >= 1.50,
-        dateLabel: dateStr,
-        time: nowTime
-      });
-    });
-
-    console.log(`[BotManager] ✅ Binance REST 24h Ticker'larından M1-A (${topDecliners.length}) ve M1-P (${topGainers.length}) baslangic sinyalleri yerel olarak uretildi.`);
+  _metadata(timestamp) {
+    const date = new Date(timestamp);
+    return { timestamp, isoDate: date.toISOString(), dateStr: date.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' }), time: date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' }) };
   }
-
-  /**
-   * M1 sinyal metrikleri (Visivero birebir):
-   *  - prevClose  = bir önceki KAPANMIŞ 1m mumunun kapanışı (openTime ile eşleştirilir, dizi indeksi ile değil)
-   *  - pct        = (anlık fiyat - prevClose) / prevClose * 100  (yuvarlama yok)
-   *  - volDelta   = (canlı mum USDT hacmi - önceki mum USDT hacmi) / önceki mum hacmi * 100
-   *                 canlı mum hacmi sinyal ANINDA WS'ten (quoteVol - dakika başı quoteVol) alınır;
-   *                 REST gecikmesi hacmi şişirdiği için REST'teki canlı mum yalnızca yedektir.
-   *  - closes     = RSI/StochRSI için kapanmış mumlar + anlık fiyat
-   */
   async _computeM1Metrics(alert) {
-    const klines = await marketDataEngine.getFreshKlines(alert.symbol, '1m', 100);
-    if (!klines || klines.length < 20) return null;
-
-    const minute = alert.candleMinute || Math.floor(alert.timestamp / 60000);
-    const curOpen = minute * 60000;
-    const prevOpen = curOpen - 60000;
-
-    const prevK = klines.find(k => k.openTime === prevOpen);
-    if (!prevK || !(prevK.close > 0)) return null;
-    const curK = klines.find(k => k.openTime === curOpen) || null;
-
-    const pct = ((alert.price - prevK.close) / prevK.close) * 100;
-
-    // Canlı mum hacmi: Binance'in kendi 1m mum quoteVolume değeri birincil kaynaktır (Visivero ile aynı kaynak).
-    // WS miniTicker 24s KAYAN pencere olduğundan (quoteVol - startVol) eski dakikanın düşmesiyle eksik çıkar;
-    // bu yüzden yalnızca yedek olarak kullanılır.
-    let curVol = curK && curK.quoteVolume >= 0 ? curK.quoteVolume : null;
-    if (curVol === null || curVol === undefined) {
-      curVol = alert.candleQuoteVol;
-    }
-    let volDelta = null;
-    if (curVol !== null && prevK.quoteVolume > 0) {
-      volDelta = ((curVol - prevK.quoteVolume) / prevK.quoteVolume) * 100;
-    }
-
-    const closes = klines.filter(k => k.openTime < curOpen).map(k => k.close).concat([alert.price]);
-    const rsiRes = quantIndicators.calculateRSI(closes, 14);
-    const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
-
-    return {
-      prevClose: prevK.close,
-      pct,
-      volDelta,
-      rsi: Math.round(rsiRes.rsi),
-      stochK: Math.round(stochRes.k),
-      stochD: Math.round(stochRes.d)
-    };
+    const snapshot = alert.candle;
+    if (!snapshot || !Number.isFinite(snapshot.quoteVolume) || snapshot.quoteVolume < 0 || !Number.isInteger(snapshot.openTime) || snapshot.openTime % 60000 !== 0 || alert.timestamp < snapshot.openTime || alert.timestamp > snapshot.openTime + 70000) return null;
+    const klines = await marketDataEngine.getKlines(alert.symbol, '1m', 251);
+    const closed = klines.filter(k => k.openTime < snapshot.openTime && k.closeTime < snapshot.openTime).slice(-249);
+    if (closed.length !== 249 || closed.at(-1).openTime !== snapshot.openTime - 60000) return null;
+    if (closed.some((k, i) => i && k.openTime - closed[i - 1].openTime !== 60000)) return null;
+    const prev = closed.at(-1);
+    if (!(prev.close > 0) || !(prev.quoteVolume > 0) || !(snapshot.close > 0)) return null;
+    const closes = closed.map(k => k.close).concat(snapshot.close);
+    const rsi = quant.calculateRSI(closes, 14);
+    const stoch = quant.calculateStochRSI(rsi.rsiSeries, 14, 3, 3);
+    if (![rsi.rsi, stoch.k, stoch.d].every(Number.isFinite)) return null;
+    const result = { prevClose: prev.close, pct: (snapshot.close / prev.close - 1) * 100, volDelta: (snapshot.quoteVolume / prev.quoteVolume - 1) * 100, rsi: Math.round(rsi.rsi), stochK: Math.round(stoch.k), stochD: Math.round(stoch.d) };
+    return Object.values(result).every(Number.isFinite) ? result : null;
   }
-
+  async _closedMetrics(symbol, interval, timestamp) {
+    const raw = await marketDataEngine.getKlines(symbol, interval, 251);
+    const closed = raw.filter(k => k.closeTime < timestamp).slice(-250);
+    if (closed.length !== 250) return null;
+    if (closed.some((k, i) => i && k.openTime !== closed[i - 1].closeTime + 1)) return null;
+    const duration = closed.at(-1).closeTime - closed.at(-1).openTime + 1;
+    if (timestamp - closed.at(-1).closeTime > duration + 10000) return null;
+    const metrics = quant.calculateAllMetrics(closed);
+    return metrics ? { ...metrics, candles: closed, last: closed.at(-1), previous: closed.at(-2) } : null;
+  }
   async _handleRadarAlert(alert) {
-    const sym = alert.symbol;
-    const now = Date.now();
-    const dateObj = new Date(now);
-    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-    // ─────────────────────────────────────────────────────────────
-    // A+B. M1-A (Drop/Boost) ve M1-Premium — gerçek Binance verisi, tahmin/fallback YOK
-    // ─────────────────────────────────────────────────────────────
+    if (!alert?.symbol || !Number.isFinite(alert.timestamp)) return;
+    const key = `${alert.symbol}_${alert.type}`;
+    const generation = this.generation;
+    if (this.pendingRadar.get(key) === generation) return;
+    this.pendingRadar.set(key, generation);
+    try { await this._processRadarAlert(alert); }
+    finally { if (this.pendingRadar.get(key) === generation) this.pendingRadar.delete(key); }
+  }
+  async _processRadarAlert(alert) {
+    const sym = alert.symbol, timestamp = alert.timestamp, meta = this._metadata(timestamp);
+    const generation = this.generation;
     if (alert.type === 'm1a' || alert.type === 'm1premium') {
-      const isDropAlert = alert.type === 'm1a';
-      const gateBot = isDropAlert ? m1aDropBot : m1PremiumBot;
-      if (!gateBot.canEmitSignal(sym, '1m', null, 45000)) return;
-
-      let m;
-      try { m = await this._computeM1Metrics(alert); } catch (e) { m = null; }
-      if (!m || m.volDelta === null) {
-        console.warn(`[M1] ${sym}: gerçek metrikler alınamadı, sinyal atlandı (tahmini değer üretilmez).`);
-        return;
+      const candleTime = alert.candle?.openTime;
+      if (!this.getBot('m1a').canEmitSignal(sym, '1m', candleTime, 45000)) return;
+      const m = await this._computeM1Metrics(alert);
+      if (generation !== this.generation) return;
+      if (!m || Math.abs(m.pct) < 0.70) return;
+      const drop = m.pct < 0, pct = `${drop ? '' : '+'}${m.pct.toFixed(2)}%`;
+      const common = { ...meta, symbol: sym, candleOpenTime: candleTime, timeframe: '1m', currentPrice: formatCryptoPrice(alert.candle.close, sym), prevPrice: formatCryptoPrice(m.prevClose, sym), volume: `${m.volDelta.toFixed(2)}%`, volumeSource: 'binance-kline-quote', currentQuoteVolume: alert.candle.quoteVolume, dot: drop ? '🔴' : '🟢' };
+      this.getBot('m1a').addSignal({ ...common, id: `m1a_${sym}_${candleTime}`, type: drop ? 'drop' : 'boost', ...(drop ? { dropValue: pct } : { boostValue: pct }), rsi: `${m.rsi}${m.rsi <= 30 || m.rsi >= 70 ? ' ⚠️' : ''}`, stochastic: `${m.stochK}/${m.stochD}${m.stochK <= 20 || m.stochK >= 80 ? ' ⚠️' : ''}`, btcStatus: '—' });
+      if (!drop && this.getBot('m1premium').canEmitSignal(sym, '1m', candleTime, 45000)) {
+        const [m5, h1] = await Promise.all([this._closedMetrics(sym, '5m', timestamp), this._closedMetrics(sym, '1h', timestamp)]);
+        if (generation !== this.generation) return;
+        const label = value => Number.isFinite(value) ? String(Math.round(value)) : '—';
+        this.getBot('m1premium').addSignal({ ...common, id: `m1p_${sym}_${candleTime}`, boostValue: pct, stars: m.pct >= 1.50 ? '⭐️' : '', isFavorite: m.pct >= 1.50, rsi: { m1: label(m.rsi), m5: label(m5?.rsi), h1: label(h1?.rsi) }, srsi: { m1: label(m.stochK), m5: label(m5?.srsiK), h1: label(h1?.srsiK) } });
       }
-      // Gösterilen yüzde (önceki kapanışa göre) eşiğin altındaysa sinyal değildir
-      if (Math.abs(m.pct) < 0.70) return;
-
-      const curPrice = formatCryptoPrice(alert.price, sym);
-      const prevPrice = formatCryptoPrice(m.prevClose, sym);
-      const isDrop = m.pct < 0;
-      const pctStr = `${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}%`;
-      const volFormatted = `${m.volDelta.toFixed(2)}%`;
-      const rsiFormatted = `${m.rsi}${m.rsi <= 30 || m.rsi >= 70 ? ' ⚠️' : ''}`;
-      const stochFormatted = `${m.stochK}/${m.stochD}${m.stochK <= 20 || m.stochK >= 80 ? ' ⚠️' : ''}`;
-
-      if (!isDrop && m1PremiumBot.canEmitSignal(sym, '1m', null, 45000)) {
-        m1PremiumBot.addSignal({
-          id: `m1p_${sym}_${now}`,
-          symbol: sym,
-          timestamp: now,
-          isoDate: dateObj.toISOString(),
-          dateStr,
-          dot: '🟢',
-          stars: m.pct >= 1.50 ? '⭐️' : '',
-          boostValue: pctStr,
-          currentPrice: curPrice,
-          prevPrice,
-          rsi: { m1: `${m.rsi} ❗`, m5: '55', h1: '48' },
-          srsi: { m1: `${m.stochK} ❗`, m5: `${m.stochD}`, h1: '35' },
-          divergence: m.pct >= 1.20 ? '1m ✅' : undefined,
-          isFavorite: m.pct >= 1.50,
-          dateLabel: 'Bugün',
-          time: nowTime
-        });
-      }
-
-      m1aDropBot.addSignal({
-        id: `m1a_${sym}_${now}`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        type: isDrop ? 'drop' : 'boost',
-        dot: isDrop ? '🔴' : '🟢',
-        ...(isDrop ? { dropValue: pctStr } : { boostValue: pctStr }),
-        currentPrice: curPrice,
-        prevPrice,
-        volume: volFormatted,
-        rsi: rsiFormatted,
-        stochastic: stochFormatted,
-        btcStatus: 'Normal',
-        dateLabel: 'Bugün',
-        time: nowTime
-      });
-
-      console.log(`[QuantEngine Sinyal] M1 ${isDrop ? 'Drop' : 'Boost'}: ${sym} (${pctStr} | Vol: ${volFormatted} | RSI: ${m.rsi} | Stoch: ${m.stochK}/${m.stochD})`);
       return;
     }
-
-    // ─────────────────────────────────────────────────────────────
-    // C. V3-A Hacim Botu: DeltaVol% >= +15% ve 24s USDT Hacmi > $5M
-    // ─────────────────────────────────────────────────────────────
     if (alert.type === 'v3') {
-      if (!v3VolumeBot.canEmitSignal(sym, '5m', null, 180000)) return;
-
-      const deltaVolPct = alert.volChangePct || 18.5;
-      const baseAsset = sym.replace('USDT', '');
-      const approxVolM = (alert.volUsd / 1000000).toFixed(1);
-
-      v3VolumeBot.addSignal({
-        id: `v3_${sym}_${now}`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        hacimChange: `+${Number(deltaVolPct).toFixed(2)}%`,
-        hacim24s: `$${approxVolM}M (${baseAsset})`,
-        dateLabel: dateStr,
-        time: nowTime
-      });
-      console.log(`[QuantEngine Sinyal] V3-A Hacim: ${sym} (+${Number(deltaVolPct).toFixed(2)}%)`);
+      const bot = this.getBot('v3'), candle = alert.candle;
+      if (!candle?.isClosed || !bot.canEmitSignal(sym, '1m', candle.openTime, 300000) || !(alert.volUsd > 10000000)) return;
+      const raw = await marketDataEngine.getKlines(sym, '1m', 251);
+      if (generation !== this.generation) return;
+      const prior = raw.filter(k => k.openTime < candle.openTime && k.closeTime < candle.openTime).slice(-20);
+      if (prior.length !== 20 || prior.at(-1).openTime !== candle.openTime - 60000 || prior.some((k, i) => i && k.openTime !== prior[i - 1].openTime + 60000)) return;
+      const avg = prior.reduce((sum, k) => sum + k.quoteVolume, 0) / 20;
+      if (!(avg > 0) || !Number.isFinite(candle.quoteVolume)) return;
+      const delta = (candle.quoteVolume / avg - 1) * 100;
+      if (delta < 25) return;
+      bot.addSignal({ ...meta, symbol: sym, id: `v3_${sym}_${candle.openTime}`, candleOpenTime: candle.openTime, timeframe: '1m', hacimChange: `+${delta.toFixed(2)}%`, hacim24s: `$${(alert.volUsd / 1000000).toFixed(1)}M`, volumeSource: 'binance-kline-quote-sma20' });
       return;
     }
-
-    // ─────────────────────────────────────────────────────────────
-    // D. Funding Rate (FR) Botu: Negatif fonlama veya pozitiften negatife geçiş
-    // ─────────────────────────────────────────────────────────────
     if (alert.type === 'fr') {
-      if (!fundingRateBot.canEmitSignal(sym, 'fr', null, 600000)) return;
-
-      const frPct = (alert.fundingRate * 100).toFixed(4);
-      const prevFrPct = alert.prevFundingRate !== undefined ? (alert.prevFundingRate * 100).toFixed(4) : '+0.0100';
-      const isFlip = alert.prevFundingRate > 0 && alert.fundingRate < 0;
-
-      fundingRateBot.addSignal({
-        id: `fr_${sym}_${now}`,
-        symbol: sym,
-        dot: isFlip ? '🟢' : '🔴',
-        alertText: isFlip ? 'Funding changed from + to - (Short Squeeze)' : 'Negative Funding (Short Squeeze Candidate)',
-        fundingRate: `${frPct}%`,
-        previousFunding: `${prevFrPct}%`,
-        difference: `${(alert.fundingRate - (alert.prevFundingRate || 0)).toFixed(4)}%`,
-        timeRemaining: '04:00:00',
-        dateLabel: dateStr,
-        time: nowTime
-      });
-      console.log(`[QuantEngine Sinyal] FR: ${sym} (${frPct}%)`);
+      const bot = this.getBot('fr');
+      const flip = Number.isFinite(alert.prevFundingRate) && alert.prevFundingRate > 0 && alert.fundingRate < 0;
+      if ((!flip && !(alert.fundingRate <= -0.001)) || !bot.canEmitSignal(sym, 'fr', null, 900000)) return;
+      const data = await derivatives.enrich(sym, marketDataEngine.getMarkPrice(sym));
+      if (generation !== this.generation) return;
+      if (!data || !(data.oiDeltaPct > 0)) return;
+      const prev = alert.prevFundingRate;
+      const remaining = Math.max(0, Math.floor((alert.nextFundingTime - timestamp) / 1000));
+      const countdown = [Math.floor(remaining / 3600), Math.floor(remaining % 3600 / 60), remaining % 60].map(n => String(n).padStart(2, '0')).join(':');
+      bot.addSignal({ ...meta, symbol: sym, id: `fr_${sym}_${timestamp}`, dot: flip ? '🟢' : '🔴', alertText: flip ? 'Funding changed from + to -' : 'Negative Funding (OI rising)', fundingRate: `${(alert.fundingRate * 100).toFixed(4)}%`, previousFunding: Number.isFinite(prev) ? `${(prev * 100).toFixed(4)}%` : '—', difference: Number.isFinite(prev) ? `${((alert.fundingRate - prev) * 100).toFixed(4)}%` : '—', timeRemaining: countdown });
     }
   }
-
-  /**
-   * Fonlama Oranı (Funding Rate) Taraması: En negatif fonlama oranına sahip pariteler
-   */
   async _scanFundingRates() {
-    const topNeg = marketDataEngine.getTopNegativeFunding(10);
-    if (!topNeg || topNeg.length === 0) return;
-
-    const now = Date.now();
-    const dateObj = new Date(now);
-    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-    for (const item of topNeg) {
-      const sym = item.symbol;
-      if (!fundingRateBot.canEmitSignal(sym, 'fr', null, 900000)) continue;
-
-      const frPct = (item.fundingRate * 100).toFixed(4);
-      fundingRateBot.addSignal({
-        id: `fr_${sym}_${now}`,
-        symbol: sym,
-        dot: '🔴',
-        alertText: 'Negative Funding (Short Squeeze Candidate)',
-        fundingRate: `${frPct}%`,
-        previousFunding: '+0.0100%',
-        difference: `${(item.fundingRate - 0.0001).toFixed(4)}%`,
-        timeRemaining: '04:00:00',
-        dateLabel: dateStr,
-        time: nowTime
-      });
-      console.log(`[QuantEngine Sinyal] FR: ${sym} (${frPct}%)`);
-    }
+    for (const item of marketDataEngine.getTopNegativeFunding(10)) await this._handleRadarAlert({ type: 'fr', symbol: item.symbol, fundingRate: item.fundingRate, prevFundingRate: item.previousFundingRate, nextFundingTime: item.nextFundingTime, timestamp: item.eventTime });
   }
-
-  /**
-   * Aşama 2: Yapısal ve Mum Kapanışı Botları (Hammer Pro+, Hammer Pro, Div, 4S Sniper, 4S)
-   */
   async _scanStructuralSetups() {
-    const allTickers = marketDataEngine.getAllTickers();
-    if (allTickers.length === 0) return;
-
-    // En aktif 15 hacimli pariteyi tara (Kuyruk kilitlenmesini engelle)
-    const candidates = allTickers
-      .sort((a, b) => b.volUsd - a.volUsd)
-      .slice(0, 15)
-      .map(t => t.symbol);
-
-    const now = Date.now();
-    const dateObj = new Date(now);
-    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-    for (let i = 0; i < candidates.length; i++) {
-      const sym = candidates[i];
-
-      try {
-        const [klines5m, klines1h] = await Promise.all([
-          marketDataEngine.getKlines(sym, '5m', 250),
-          marketDataEngine.getKlines(sym, '1h', 250)
-        ]);
-
-        if (klines5m.length < 50 || klines1h.length < 50) continue;
-
-        const lastBar5m = klines5m[klines5m.length - 1];
-        const lastBar1h = klines1h[klines1h.length - 1];
-
-        const m5 = quantIndicators.calculateAllMetrics(klines5m);
-        const m1h = quantIndicators.calculateAllMetrics(klines1h);
-        if (!m5 || !m1h) continue;
-
-        const curPrice = lastBar5m.close;
-
-        // 1. Hammer Pro Plus: 5m RSI <= 38, WT(10,21) yukarı kesişim veya aşırı satım
-        if (
-          m5.rsi <= 38 &&
-          (m5.wtCrossUp || m5.wtOversold || m1h.rsi <= 40) &&
-          m5.pivots.pivotDistancePct <= 1.20
-        ) {
-          if (hammerProPlusBot.canEmitSignal(sym, '5m', lastBar5m.openTime, 300000)) {
-            const boostVal = '+1.45%';
-            hammerProPlusBot.addSignal({
-              id: `hpp_${sym}_${now}`,
-              candleOpenTime: lastBar5m.openTime,
-              timeframe: '5m',
-              symbol: sym,
-              timestamp: now,
-              isoDate: dateObj.toISOString(),
-              dateStr,
-              stars: m5.pivots.pivotDistancePct <= 0.40 ? '⭐⭐⭐' : '⭐⭐',
-              dot: '🟢',
-              strategy: '#W1 / #S1',
-              boostValue: boostVal,
-              currentPrice: formatCryptoPrice(curPrice, sym),
-              prevPrice: computePrevPrice(curPrice, 1.45, sym),
-              rsi: {
-                m1: `${Math.round(m5.rsi)} ❗`,
-                m5: `${Math.round(m5.rsi)} ❗`,
-                h1: `${Math.round(m1h.rsi)} ❗`
-              },
-              srsi: {
-                m1: '15 ❗',
-                m5: `${Math.round(m5.srsiK)} ❗`,
-                h1: `${Math.round(m1h.srsiK)} ❗`
-              },
-              wt: '5m 🟢',
-              pivot: `%${m5.pivots.pivotDistancePct} ⚠️`,
-              dateLabel: dateStr,
-              time: nowTime
-            });
-            console.log(`[QuantEngine Sinyal] Hammer Pro Plus: ${sym}`);
-          }
-        }
-
-        // 2. Hammer Pro: 5m RSI <= 42 veya WaveTrend boğa kesişimi (#W1 Dip Dönüş)
-        if ((m5.rsi <= 42 || (m5.wtCrossUp && m5.rsi <= 50)) && hammerProBot.canEmitSignal(sym, '5m', lastBar5m.openTime, 300000)) {
-          const boostVal = '+1.20%';
-          hammerProBot.addSignal({
-            id: `hp_${sym}_${now}`,
-            candleOpenTime: lastBar5m.openTime,
-            timeframe: '5m',
-            symbol: sym,
-            timestamp: now,
-            isoDate: dateObj.toISOString(),
-            dateStr,
-            stars: m5.rsi <= 35 ? '⭐⭐⭐' : '⭐⭐',
-            dot: '🟢',
-            strategy: '#W1 Dip Donus',
-            boostValue: boostVal,
-            currentPrice: formatCryptoPrice(curPrice, sym),
-            prevPrice: computePrevPrice(curPrice, 1.20, sym),
-            rsi: {
-              m1: `${Math.round(m5.rsi)}`,
-              m5: `${Math.round(m5.rsi)} ${m5.rsi <= 35 ? '❗' : ''}`,
-              h1: `${Math.round(m1h.rsi)}`
-            },
-            srsi: {
-              m1: '25',
-              m5: `${Math.round(m5.srsiK)}`,
-              h1: `${Math.round(m1h.srsiK)}`
-            },
-            wt: m5.wtCrossUp ? '5m 🟢 Cross' : 'Dip Reversal',
-            pivot: `%${m5.pivots.pivotDistancePct}`,
-            dateLabel: dateStr,
-            time: nowTime
-          });
-          console.log(`[QuantEngine Sinyal] Hammer Pro: ${sym} (RSI: ${Math.round(m5.rsi)})`);
-        }
-
-        // 3. Divergence Botu: 1H veya 5m RSI Pivot Lookback Uyuşmazlığı
-        const has1hDiv = m1h.divergence && (m1h.divergence.hasBullDiv || m1h.divergence.hasBearDiv);
-        const has5mDiv = m5.divergence && (m5.divergence.hasBullDiv || m5.divergence.hasBearDiv);
-        if (has1hDiv || has5mDiv) {
-          const is1h = has1hDiv;
-          const divInfo = is1h ? m1h.divergence : m5.divergence;
-          const tf = is1h ? '1h' : '5m';
-          const candleTime = is1h ? lastBar1h.openTime : lastBar5m.openTime;
-
-          if (divergenceBot.canEmitSignal(sym, tf, candleTime, 900000)) {
-            const isBull = divInfo.hasBullDiv;
-            const boostVal = isBull ? '+2.10%' : '-1.85%';
-            divergenceBot.addSignal({
-              id: `div_${sym}_${now}`,
-              candleOpenTime: candleTime,
-              timeframe: tf,
-              symbol: sym,
-              timestamp: now,
-              isoDate: dateObj.toISOString(),
-              dateStr,
-              dot: isBull ? '🟢' : '🔴',
-              strategy: `${tf.toUpperCase()} RSI DIVERGENCE`,
-              boostValue: boostVal,
-              currentPrice: formatCryptoPrice(curPrice, sym),
-              prevPrice: computePrevPrice(curPrice, isBull ? 2.10 : -1.85, sym),
-              rsi: {
-                h1: `${Math.round(m1h.rsi)} ❗`,
-                h4: '45',
-                d1: '52'
-              },
-              srsi: {
-                h1: `${Math.round(m1h.srsiK)} ❗`,
-                h4: '25',
-                d1: '40'
-              },
-              pivot: `%${m1h.pivots.pivotDistancePct} ⚠️`,
-              dateLabel: dateStr,
-              time: nowTime
-            });
-            console.log(`[QuantEngine Sinyal] Divergence: ${sym} (${divInfo.type})`);
-          }
-        }
-
-        // 4. 4S Sniper Botu: 1h RSI <= 40 ve Balina Long Oranı >= %55
-        if ((m1h.rsi <= 40 || m1h.srsiK <= 25) && fourSSniperBot.canEmitSignal(sym, '1h', lastBar1h.openTime, 600000)) {
-          let deriv = null;
-          try { deriv = await derivativesEnricher.enrich(sym); } catch (e) {}
-          if (!deriv || deriv.topTraderLongRatio >= 55.0) {
-            const whaleLong = deriv ? deriv.topTraderLongRatio : 62.5;
-            const globalLong = deriv ? deriv.globalLongRatio : 51.0;
-            fourSSniperBot.addSignal({
-              id: `4ss_${sym}_${now}`,
-              candleOpenTime: lastBar1h.openTime,
-              timeframe: '1h',
-              symbol: sym,
-              timestamp: now,
-              isoDate: dateObj.toISOString(),
-              dateStr,
-              dot: '🟢',
-              strategy: 'NW UP',
-              boostValue: '+3.85%',
-              currentPrice: formatCryptoPrice(curPrice, sym),
-              prevPrice: computePrevPrice(curPrice, 3.85, sym),
-              rsi: {
-                h1: `${Math.round(m1h.rsi)} ❗`,
-                h4: '40',
-                d1: '55'
-              },
-              srsi: {
-                h1: `${Math.round(m1h.srsiK)}`,
-                h4: '5 ❗',
-                d1: '50'
-              },
-              traderPositioning: `${whaleLong}%`,
-              traderDot: '🟢',
-              marketExposure: `${globalLong}%`,
-              exposureDot: globalLong >= 50 ? '🟢' : '🔴',
-              dateLabel: dateStr,
-              time: nowTime
-            });
-            console.log(`[QuantEngine Sinyal] 4S Sniper: ${sym} (Whale Long: ${whaleLong}%)`);
-          }
-        }
-
-        // 5. 4S Bot: 4H/1H Yapı Momentum ve Trend Sıçraması
-        if ((m1h.rsi >= 58 || m1h.srsiK >= 70) && fourSBot.canEmitSignal(sym, '1h', lastBar1h.openTime, 600000)) {
-          let deriv = null;
-          try { deriv = await derivativesEnricher.enrich(sym); } catch (e) {}
-          const whaleLong = deriv ? deriv.topTraderLongRatio : 60.0;
-          const globalLong = deriv ? deriv.globalLongRatio : 52.0;
-          const boostVal = '+2.35%';
-          fourSBot.addSignal({
-            id: `4s_${sym}_${now}`,
-            candleOpenTime: lastBar1h.openTime,
-            timeframe: '1h',
-            symbol: sym,
-            timestamp: now,
-            isoDate: dateObj.toISOString(),
-            dateStr,
-            dot: '🟢',
-            strategy: '4H Yapi Momentum',
-            boostValue: boostVal,
-            currentPrice: formatCryptoPrice(curPrice, sym),
-            prevPrice: computePrevPrice(curPrice, 2.35, sym),
-            rsi: {
-              h1: `${Math.round(m1h.rsi)}`,
-              h4: '56',
-              d1: '50'
-            },
-            srsi: {
-              h1: `${Math.round(m1h.srsiK)}`,
-              h4: '65',
-              d1: '45'
-            },
-            traderPositioning: `${whaleLong}%`,
-            traderDot: '🟢',
-            marketExposure: `${globalLong}%`,
-            exposureDot: globalLong >= 50 ? '🟢' : '🔴',
-            dateLabel: dateStr,
-            time: nowTime
-          });
-          console.log(`[QuantEngine Sinyal] 4S: ${sym}`);
-        }
-      } catch (err) {
-        // sembol tarama hatasını atla
+    const generation = this.generation;
+    if (this.scanRunning && this.scanGeneration === generation) return;
+    this.scanRunning = true; this.scanGeneration = generation;
+    try {
+      const now = Date.now();
+      const candidates = marketDataEngine.getAllTickers().filter(t => now - t.eventTime < 120000 && t.volUsd > 1000000).sort((a, b) => b.volUsd - a.volUsd).slice(0, 15);
+      for (const ticker of candidates) {
+        if (generation !== this.generation) break;
+        try { await this._scanSymbol(ticker.symbol, now); }
+        catch (err) { console.warn(`[BotManager ${ticker.symbol}]`, err.message); }
       }
-    }
+    } finally { if (this.scanGeneration === generation) this.scanRunning = false; }
   }
-
+  async _scanSymbol(sym, now) {
+    const generation = this.generation;
+    const [m1, m5, h1, h4, d1, daily] = await Promise.all([
+      ...['1m', '5m', '1h', '4h', '1d'].map(tf => this._closedMetrics(sym, tf, now)),
+      marketDataEngine.getKlines(sym, '1d', 2)
+    ]);
+    if (generation !== this.generation) return;
+    if (!h1) return;
+    // Session pivots come from the previous completed UTC day, not a random 5m candle.
+    const previousDay = daily.filter(k => k.closeTime < now).at(-1);
+    const pivots = previousDay ? quant.calculatePivots(previousDay, (m5 || h1).last.close) : null;
+    const label = value => Number.isFinite(value) ? String(Math.round(value)) : '—';
+    const rsi = { m1: label(m1?.rsi), m5: label(m5?.rsi), h1: label(h1.rsi), h4: label(h4?.rsi), d1: label(d1?.rsi) };
+    const srsi = { m1: label(m1?.srsiK), m5: label(m5?.srsiK), h1: label(h1.srsiK), h4: label(h4?.srsiK), d1: label(d1?.srsiK) };
+    const add = (id, metric, tf, cooldown, fields = {}) => {
+      const bot = this.getBot(id);
+      if (!bot.canEmitSignal(sym, tf, metric.last.openTime, cooldown)) return;
+      const change = (metric.last.close / metric.previous.close - 1) * 100;
+      return bot.addSignal({ ...this._metadata(metric.last.closeTime + 1), id: `${id}_${sym}_${metric.last.openTime}`, symbol: sym, candleOpenTime: metric.last.openTime, timeframe: tf, currentPrice: formatCryptoPrice(metric.last.close, sym), prevPrice: formatCryptoPrice(metric.previous.close, sym), boostValue: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`, rsi, srsi, pivot: pivots ? `%${pivots.pivotDistancePct.toFixed(2)}` : '—', ...fields });
+    };
+    if (m1 && m5 && h4 && m5.rsi <= 30 && h1.rsi <= 30 && Number.isFinite(m5.srsiK) && Number.isFinite(h1.srsiK) && m5.srsiK <= 15 && h1.srsiK <= 15 && m1.wtCrossUp && h4.last.close >= h4.ema200) add('hammerpro', m5, '5m', 300000, { dot: '🟢', strategy: '#W1 Dip Donus', wt: '1m 🟢 Cross' });
+    if (m1 && m5 && pivots && m1.rsi <= 30 && m5.rsi <= 30 && h1.rsi <= 30 && m1.wtCrossUp && m1.wt1 <= -50 && pivots.pivotDistancePct <= 0.50) add('hammerproplus', m5, '5m', 300000, { dot: '🟢', strategy: '#W1 / #S1', wt: '1m 🟢 Cross' });
+    const div = h1.divergence;
+    if (div?.hasBullDiv || div?.hasBearDiv) add('div', h1, '1h', 900000, { dot: div.hasBullDiv ? '🟢' : '🔴', strategy: '1H RSI DIVERGENCE' });
+    if (!h4) return;
+    const sniper = h1.rsi <= 30 && ((Number.isFinite(h4.srsiK) && h4.srsiK <= 5) || (Number.isFinite(d1?.srsiK) && d1.srsiK <= 5));
+    const momentum = (h4.last.close / h4.previous.close - 1) * 100 >= 4;
+    if (!sniper && !momentum) return;
+    const data = await derivatives.enrich(sym, marketDataEngine.getMarkPrice(sym));
+    if (generation !== this.generation) return;
+    if (!Number.isFinite(data?.topTraderLongRatio) || !Number.isFinite(data?.globalLongRatio)) return;
+    const ratios = { traderPositioning: `${data.topTraderLongRatio}%`, traderDot: data.topTraderLongRatio >= 50 ? '🟢' : '🔴', marketExposure: `${data.globalLongRatio}%`, exposureDot: data.globalLongRatio >= 50 ? '🟢' : '🔴' };
+    if (sniper && data.topTraderLongRatio >= 60) add('4ssniper', h1, '1h', 600000, { ...ratios, dot: '🟢', strategy: 'NW UP' });
+    if (momentum) add('4s', h4, '4h', 600000, { ...ratios, dot: data.topTraderLongRatio >= data.globalLongRatio ? '🟢' : '🔴', strategy: '4H Yapi Momentum' });
+  }
   stopBackgroundEngine() {
     this.isEngineRunning = false;
-    if (this.structureScanTimer) {
-      clearInterval(this.structureScanTimer);
-    }
+    this.generation++;
+    clearTimeout(this.initialScanTimer); clearInterval(this.structureScanTimer);
+    if (this.radarListener) marketDataEngine.off('radarAlert', this.radarListener);
+    if (this.closedListener) marketDataEngine.off('candleClosed', this.closedListener);
     marketDataEngine.stop();
   }
 }
-
-const botManager = new BotManager();
-module.exports = botManager;
+module.exports = new BotManager();

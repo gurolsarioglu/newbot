@@ -31,7 +31,7 @@ class FourSBot extends BaseBot {
    * Top Trader threshold: %60.0
    * Market Exposure threshold: %55.0
    */
-  parseRatioAndDot(val, threshold = 60.0, fallback = 55.0) {
+  parseRatioAndDot(val, threshold = 60.0, fallback = null) {
     let rawNum = fallback;
     let explicitDot = null;
 
@@ -48,6 +48,7 @@ class FourSBot extends BaseBot {
       if (!isNaN(parsed)) rawNum = parsed;
     }
 
+    if (!Number.isFinite(rawNum) || rawNum < 0 || rawNum > 100) return { value: null, formatted: '—', dot: '⚪' };
     const dot = explicitDot || (rawNum >= threshold ? '🟢' : '🔴');
     const formatted = `${rawNum.toFixed(2)}%`;
 
@@ -61,6 +62,9 @@ class FourSBot extends BaseBot {
    * - '🟢': Sağlıklı Trend / Güçlü Balina Desteğiyle Sürdürülebilir Ralli
    */
   evaluate4HStructure({ rsi1d, rsi4h, srsi1d, srsi4h, srsi1h, traderRatio, exposureRatio, boostNum, explicitDot }) {
+    if (![rsi1d, rsi4h, srsi1d, srsi4h, srsi1h, traderRatio, exposureRatio, boostNum].every(Number.isFinite)) {
+      return { valid: false, reason: '4H yapı değerlendirmesi için gerçek gösterge/oran verisi eksik.' };
+    }
     // Açıkça belirtilmiş bir yön varsa (örn: sinyal verisindeki dot veya avcı botu)
     if (explicitDot && (explicitDot === '🔴' || explicitDot === '🟢')) {
       return { valid: true, dot: explicitDot };
@@ -98,15 +102,17 @@ class FourSBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const priceNum = parseFloat(s.price || 0);
-    const boostNum = this.parseBoost(s.boost || s.boostValue);
+    const priceNum = Number(s.price);
+    const boostNum = this.parseMetric(s.boost ?? s.boostValue);
+    if (!Number.isFinite(priceNum) || priceNum <= 0 || boostNum === null) return null;
     const boostFormatted = `+${boostNum.toFixed(2)}%`;
 
     // prevPrice güvenliği: Eğer prevPrice yoksa veya price ile aynıysa, boost üzerinden geriye doğru hesapla
-    let prevPriceStr = s.prevPrice ? String(s.prevPrice) : '';
+    let prevPriceStr = Number(s.prevPrice) > 0 ? String(s.prevPrice) : '';
     if (!prevPriceStr || prevPriceStr === String(s.price)) {
       if (priceNum > 0 && boostNum !== 0) {
         prevPriceStr = computePrevPrice(priceNum, boostNum, s.price);
@@ -116,19 +122,18 @@ class FourSBot extends BaseBot {
     }
 
     // RSI Değerleri (Sayısal parse ve dinamik ❗ formatı)
-    const rawRsi = parseInt(s.rsi, 10);
-    const rsi1hNum = parseInt(s.rsi1h || (!isNaN(rawRsi) ? rawRsi : 50), 10);
-    const rsi4hNum = parseInt(s.rsi4h || 55, 10);
-    const rsi1dNum = parseInt(s.rsi1d || 60, 10);
+    const rsi1hNum = this.parseMetric(s.rsi1h ?? s.rsi, 0, 100);
+    const rsi4hNum = this.parseMetric(s.rsi4h, 0, 100);
+    const rsi1dNum = this.parseMetric(s.rsi1d, 0, 100);
 
     // SRSI Değerleri (Sayısal parse ve dinamik ❗ formatı)
-    const srsi1hNum = parseInt(s.srsi1h || 50, 10);
-    const srsi4hNum = parseInt(s.srsi4h || s.stochK || 50, 10);
-    const srsi1dNum = parseInt(s.srsi1d || 50, 10);
+    const srsi1hNum = this.parseMetric(s.srsi1h, 0, 100);
+    const srsi4hNum = this.parseMetric(s.srsi4h, 0, 100);
+    const srsi1dNum = this.parseMetric(s.srsi1d, 0, 100);
 
     // Trader Positioning (%60+ için 🟢) ve Market Exposure (%55+ için 🟢)
-    const tpData = this.parseRatioAndDot(s.traderPositioning, 60.0, 65.0);
-    const meData = this.parseRatioAndDot(s.marketExposure, 55.0, 58.0);
+    const tpData = this.parseRatioAndDot(s.traderPositioning, 60.0);
+    const meData = this.parseRatioAndDot(s.marketExposure, 55.0);
 
     // 4H Yapı & Sahte Pump Analiz Motoru
     const explicitDot = s.dot || (s.position === 'Short' ? '🔴' : (s.position === 'Long' ? '🟢' : null));
@@ -150,11 +155,10 @@ class FourSBot extends BaseBot {
     }
 
     // Dinamik ❗ formatlama: RSI >= 70 veya <= 30; SRSI >= 85 veya <= 15
-    const fmtRsi = (v) => `${v}${v >= 70 || v <= 30 ? ' ❗' : ''}`;
-    const fmtSrsi = (v) => `${v}${v >= 85 || v <= 15 ? ' ❗' : ''}`;
+    const fmtRsi = (v) => this.formatMetric(v, v >= 70 || v <= 30);
+    const fmtSrsi = (v) => this.formatMetric(v, v >= 85 || v <= 15);
 
     const card = {
-      id: '4s_' + Date.now(),
       symbol: symbol,
       dot: analysis.dot,
       market: 'FUTURES',
@@ -180,7 +184,7 @@ class FourSBot extends BaseBot {
       time: nowTime
     };
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

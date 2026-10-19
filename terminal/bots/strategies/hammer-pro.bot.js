@@ -44,13 +44,14 @@ class HammerProBot extends BaseBot {
    * 3. Boost ivmesi en az +0.40% olmalı, ancak aşırı geç kalınmış (> +4.50%) olmamalıdır.
    */
   validateReversalQuality({ rsi1m, rsi5m, rsi1h, boostNum, hasWT }) {
+    if (!Number.isFinite(rsi1m) || !Number.isFinite(boostNum)) return { valid: false, reason: '1m dönüş verisi eksik.' };
     // Boost eşik kontrolü: Çekiç tepkisi başladı mı? (En az %0.40, en çok %4.50 FOMO tavanı)
     if (boostNum < 0.40 || boostNum > 4.50) {
       return { valid: false, reason: `Boost (${boostNum.toFixed(2)}%) ideal çekiç aralığında (%0.40 - %4.50) değil.` };
     }
 
     // Yüksek zaman dilimi aşırı satım teyidi: En az 5m veya 1h periyodunda aşırı satım olmalı
-    if (rsi5m > 40 && rsi1h > 42) {
+    if (!(Number.isFinite(rsi5m) && rsi5m <= 40) && !(Number.isFinite(rsi1h) && rsi1h <= 42)) {
       return { valid: false, reason: `5m (RSI:${rsi5m}) ve 1h (RSI:${rsi1h}) aşırı satım bölgesinde değil. Sahte tepki riski.` };
     }
 
@@ -63,15 +64,17 @@ class HammerProBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const priceNum = parseFloat(s.price || 0);
-    const boostNum = this.parseBoost(s.boost || s.boostValue);
+    const priceNum = Number(s.price);
+    const boostNum = this.parseMetric(s.boost ?? s.boostValue);
+    if (!Number.isFinite(priceNum) || priceNum <= 0 || boostNum === null) return null;
     const boostFormatted = `+${boostNum.toFixed(2)}%`;
 
     // prevPrice güvenliği: Eğer prevPrice yoksa veya price ile aynıysa, boost üzerinden geriye doğru hesapla
-    let prevPriceStr = s.prevPrice ? String(s.prevPrice) : '';
+    let prevPriceStr = Number(s.prevPrice) > 0 ? String(s.prevPrice) : '';
     if (!prevPriceStr || prevPriceStr === String(s.price)) {
       if (priceNum > 0 && boostNum !== 0) {
         prevPriceStr = computePrevPrice(priceNum, boostNum, s.price);
@@ -81,22 +84,21 @@ class HammerProBot extends BaseBot {
     }
 
     // RSI Değerleri (Sayısal parse ve Trader Alarm ! Formatı)
-    const rawRsi = parseInt(s.rsi, 10);
-    const rsi1mNum = parseInt(s.rsi1m || (!isNaN(rawRsi) ? rawRsi : 28), 10);
-    const rsi5mNum = parseInt(s.rsi5m || (!isNaN(rawRsi) ? Math.min(rawRsi + 2, 45) : 30), 10);
-    const rsi1hNum = parseInt(s.rsi1h || 30, 10);
+    const rsi1mNum = this.parseMetric(s.rsi1m ?? s.rsi, 0, 100);
+    const rsi5mNum = this.parseMetric(s.rsi5m, 0, 100);
+    const rsi1hNum = this.parseMetric(s.rsi1h, 0, 100);
 
     // SRSI Değerleri
-    const srsi1mNum = parseInt(s.srsi1m || s.stochK || 20, 10);
-    const srsi5mNum = parseInt(s.srsi5m || s.stochD || 5, 10);
-    const srsi1hNum = parseInt(s.srsi1h || 10, 10);
+    const srsi1mNum = this.parseMetric(s.srsi1m ?? s.stochK, 0, 100);
+    const srsi5mNum = this.parseMetric(s.srsi5m, 0, 100);
+    const srsi1hNum = this.parseMetric(s.srsi1h, 0, 100);
 
     // WaveTrend Teyidi
-    const hasWT = Boolean(s.wt || s.stochK < 20 || rsi1mNum <= 30);
+    const hasWT = s.wtCrossUp === true || (typeof s.wt === 'string' && /🟢|cross.*up|up.*cross/i.test(s.wt));
     const wtDisplay = s.wt || (hasWT ? '1m 🟢' : '—');
 
     // Trader & Mantık Doğrulama Filtresi (Dışarıdan gelen onaylı sinyaller hariç)
-    if (!s.rawId) {
+    {
       const validation = this.validateReversalQuality({
         rsi1m: rsi1mNum,
         rsi5m: rsi5mNum,
@@ -130,21 +132,20 @@ class HammerProBot extends BaseBot {
     }
 
     const card = {
-      id: 'h_' + Date.now(),
       symbol: symbol,
       strategy: s.strategy || '#W1',
       boostValue: boostFormatted,
       currentPrice: formatCryptoPrice(s.price),
       prevPrice: prevPriceStr,
       rsi: {
-        m1: `${rsi1mNum}${rsi1mNum <= 30 ? ' ❗' : ''}`,
-        m5: `${rsi5mNum}${rsi5mNum <= 30 ? ' ❗' : ''}`,
-        h1: `${rsi1hNum}${rsi1hNum <= 30 ? ' ❗' : ''}`
+        m1: this.formatMetric(rsi1mNum, rsi1mNum <= 30),
+        m5: this.formatMetric(rsi5mNum, rsi5mNum <= 30),
+        h1: this.formatMetric(rsi1hNum, rsi1hNum <= 30)
       },
       srsi: {
-        m1: String(srsi1mNum),
-        m5: `${srsi5mNum}${srsi5mNum <= 15 ? ' ❗' : ''}`,
-        h1: `${srsi1hNum}${srsi1hNum <= 15 ? ' ❗' : ''}`
+        m1: this.formatMetric(srsi1mNum),
+        m5: this.formatMetric(srsi5mNum, srsi5mNum <= 15),
+        h1: this.formatMetric(srsi1hNum, srsi1hNum <= 15)
       },
       wt: wtDisplay,
       dateLabel: 'Today',
@@ -154,7 +155,7 @@ class HammerProBot extends BaseBot {
     if (pivotDisplay) card.pivot = pivotDisplay;
     if (ema200Display) card.ema200 = ema200Display;
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

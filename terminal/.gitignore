@@ -1,0 +1,4 @@
+node_modules/
+.npm-cache/
+data/binance_api_config.json
+data/binance_api_config.json.tmp

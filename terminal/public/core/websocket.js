@@ -31,7 +31,9 @@ const WebSocketManager = (() => {
     currentSymbol   = symbol.toLowerCase();
     currentInterval = interval;
 
-    const streams = `${currentSymbol}@kline_1m/${currentSymbol}@kline_5m/${currentSymbol}@kline_1h/${currentSymbol}@kline_1d/${currentSymbol}@ticker/${currentSymbol}@aggTrade/${currentSymbol}@forceOrder`;
+    const intervals = [...new Set(['1m', '5m', '1h', '1d', interval])];
+    const streams = [...intervals.map(tf => `${currentSymbol}@kline_${tf}`),
+      `${currentSymbol}@ticker`, `${currentSymbol}@aggTrade`, `${currentSymbol}@forceOrder`].join('/');
     const fullUrl = `${BASE_WS}?streams=${streams}`;
 
     try {
@@ -41,8 +43,9 @@ const WebSocketManager = (() => {
       return;
     }
 
+    const socket = ws;
     ws.onopen = () => {
-      if (myGen !== generation) { ws.close(); return; }
+      if (myGen !== generation) { socket.close(); return; }
       console.log(`[WS] Bağlandı: ${streams}`);
       EventBus.emit('ws:status', 'connected');
       // Market stream uses native websocket transport pings; no JSON ping needed.

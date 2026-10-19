@@ -403,6 +403,7 @@
     let activeSymbol = '';
     let searchQuery = '';
     let pollInterval = null;
+    let signalRequestGeneration = 0;
 
     // Toast Gösterici
     let toastTimer = null;
@@ -476,10 +477,13 @@
 
     // Sinyalleri Çek
     async function fetchSignals() {
+      const targetBot = currentBot;
+      const generation = ++signalRequestGeneration;
       try {
-        const res = await fetch(`/api/signals?bot=${currentBot}`);
+        const res = await fetch(`/api/signals?bot=${targetBot}`);
         if (!res.ok) return;
         const data = await res.json();
+        if (generation !== signalRequestGeneration || targetBot !== currentBot) return;
         currentSignals = data.signals || [];
         renderSignals(true);
       } catch (err) {
@@ -542,6 +546,7 @@
 
       currentSignals = [];
       updateHeaderInfo();
+      renderSignals();
       fetchSignals();
     }
 

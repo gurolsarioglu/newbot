@@ -33,9 +33,7 @@ class M1PremiumBot extends BaseBot {
    * 3. Yıldız (⭐ / isFavorite): Boost >= +1.50% ve (RSI >= 68 veya Divergence veya SRSI >= 95)
    */
   evaluateM1Premium({ boostNum, rsi1m, srsi1m, divergence, explicitFav, isRawExternal }) {
-    if (isRawExternal && boostNum > 0) {
-      return { valid: true, isFavorite: boostNum >= 1.50 };
-    }
+    if (!Number.isFinite(boostNum) || !Number.isFinite(rsi1m) || !Number.isFinite(srsi1m)) return { valid: false, reason: '1m momentum verisi eksik.' };
 
     // Breakout eşik kontrolü: En az %0.65 ani sıçrama
     if (boostNum < 0.65) {
@@ -59,27 +57,30 @@ class M1PremiumBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const priceNum = parseFloat(s.price || 0);
-    const boostNum = this.parseBoost(s.boost || s.boostValue);
+    const priceNum = Number(s.price);
+    const boostNum = this.parseMetric(s.boost ?? s.boostValue);
+    if (!Number.isFinite(priceNum) || priceNum <= 0 || boostNum === null) return null;
     const boostFormatted = `+${boostNum.toFixed(2)}%`;
 
     // RSI Değerleri (Sayısal parse)
-    const rawRsi = parseInt(s.rsi, 10);
-    const rsi1mNum = parseInt(s.rsi1m || (!isNaN(rawRsi) ? rawRsi : 72), 10);
-    const rsi5mNum = parseInt(s.rsi5m || 60, 10);
-    const rsi1hNum = parseInt(s.rsi1h || 45, 10);
+    const rsi1mNum = this.parseMetric(s.rsi1m ?? s.rsi, 0, 100);
+    const rsi5mNum = this.parseMetric(s.rsi5m, 0, 100);
+    const rsi1hNum = this.parseMetric(s.rsi1h, 0, 100);
 
     // SRSI Değerleri
-    const srsi1mNum = parseInt(s.srsi1m || s.stochK || 85, 10);
-    const srsi5mNum = parseInt(s.srsi5m || s.stochD || 70, 10);
-    const srsi1hNum = parseInt(s.srsi1h || 30, 10);
+    const srsi1mNum = this.parseMetric(s.srsi1m ?? s.stochK, 0, 100);
+    const srsi5mNum = this.parseMetric(s.srsi5m, 0, 100);
+    const srsi1hNum = this.parseMetric(s.srsi1h, 0, 100);
 
     // Divergence Teyidi
-    const hasDiv = Boolean(s.divergence || s.rsi1mDiv || s.rsi1hDiv);
-    const divDisplay = hasDiv ? '1m ✅' : undefined;
+    const hasDiv = s.divergence === true || s.rsi1mDiv === true || s.rsi1hDiv === true ||
+      s.divergence?.hasBullDiv === true || s.divergence?.hasBearDiv === true;
+    const divDisplay = s.rsi1mDiv === true ? '1m ✅' : (s.rsi1hDiv === true ? '1h ✅' :
+      (hasDiv ? `${s.divergenceTimeframe || '—'} ✅` : undefined));
 
     // M1 Premium Doğrulama ve Yıldız Motoru
     const explicitFav = s.isFavorite !== undefined ? Boolean(s.isFavorite) : null;
@@ -98,7 +99,7 @@ class M1PremiumBot extends BaseBot {
     }
 
     // prevPrice güvenliği: Eğer prevPrice yoksa veya price ile aynıysa, boost üzerinden geriye doğru hesapla
-    let prevPriceStr = s.prevPrice ? String(s.prevPrice) : '';
+    let prevPriceStr = Number(s.prevPrice) > 0 ? String(s.prevPrice) : '';
     if (!prevPriceStr || prevPriceStr === String(s.price)) {
       if (priceNum > 0 && boostNum !== 0) {
         prevPriceStr = computePrevPrice(priceNum, boostNum, s.price);
@@ -108,11 +109,10 @@ class M1PremiumBot extends BaseBot {
     }
 
     // Dinamik ❗ formatlama: RSI >= 70; SRSI >= 80
-    const fmtRsi = (v) => `${v}${v >= 70 ? ' ❗' : ''}`;
-    const fmtSrsi = (v) => `${v}${v >= 80 ? ' ❗' : ''}`;
+    const fmtRsi = (v) => this.formatMetric(v, v >= 70);
+    const fmtSrsi = (v) => this.formatMetric(v, v >= 80);
 
     const card = {
-      id: 'm1p_' + Date.now(),
       symbol: symbol,
       dot: s.dot || '🟢',
       stars: analysis.isFavorite ? '⭐️' : '',
@@ -138,7 +138,7 @@ class M1PremiumBot extends BaseBot {
       card.divergence = divDisplay;
     }
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

@@ -13,8 +13,8 @@ class QuantIndicatorsService {
    * @param {number} period RSI periyodu (varsayılan: 14)
    */
   calculateRSI(closes, period = 14) {
-    if (!Array.isArray(closes) || closes.length <= period) {
-      return { rsi: 50, rsiSma: 50, rsiSeries: [], rsiSmaSeries: [] };
+    if (!Array.isArray(closes) || !Number.isInteger(period) || period < 1 || closes.length <= period || closes.some(value => !Number.isFinite(value))) {
+      return { rsi: null, rsiSma: null, rsiSeries: [], rsiSmaSeries: [] };
     }
 
     const gains = [];
@@ -38,7 +38,7 @@ class QuantIndicatorsService {
     const rsiSeries = [];
     const rsFirst = avgLoss === 0 ? 100 : avgGain / avgLoss;
     const rsiFirst = avgLoss === 0 ? 100 : (100 - (100 / (1 + rsFirst)));
-    rsiSeries.push(parseFloat(rsiFirst.toFixed(2)));
+    rsiSeries.push(rsiFirst);
 
     // Wilder RMA düzleştirmesi
     for (let i = period; i < gains.length; i++) {
@@ -50,7 +50,7 @@ class QuantIndicatorsService {
       } else {
         const rs = avgGain / avgLoss;
         const rsi = 100 - (100 / (1 + rs));
-        rsiSeries.push(parseFloat(rsi.toFixed(2)));
+        rsiSeries.push(rsi);
       }
     }
 
@@ -58,18 +58,18 @@ class QuantIndicatorsService {
     const rsiSmaSeries = [];
     for (let i = 0; i < rsiSeries.length; i++) {
       if (i < period - 1) {
-        rsiSmaSeries.push(rsiSeries[i]);
+        rsiSmaSeries.push(null);
       } else {
         let sum = 0;
         for (let j = 0; j < period; j++) {
           sum += rsiSeries[i - j];
         }
-        rsiSmaSeries.push(parseFloat((sum / period).toFixed(2)));
+        rsiSmaSeries.push(sum / period);
       }
     }
 
-    const latestRsi = rsiSeries[rsiSeries.length - 1] ?? 50;
-    const latestRsiSma = rsiSmaSeries[rsiSmaSeries.length - 1] ?? 50;
+    const latestRsi = rsiSeries[rsiSeries.length - 1] ?? null;
+    const latestRsiSma = rsiSmaSeries[rsiSmaSeries.length - 1] ?? null;
 
     return {
       rsi: latestRsi,
@@ -87,8 +87,9 @@ class QuantIndicatorsService {
    * @param {number} smoothD 3
    */
   calculateStochRSI(rsiSeries, stochPeriod = 14, smoothK = 3, smoothD = 3) {
-    if (!Array.isArray(rsiSeries) || rsiSeries.length < stochPeriod) {
-      return { k: 50, d: 50, kSeries: [], dSeries: [] };
+    if (!Array.isArray(rsiSeries) || ![stochPeriod, smoothK, smoothD].every(value => Number.isInteger(value) && value > 0) ||
+      rsiSeries.length < stochPeriod || rsiSeries.some(value => !Number.isFinite(value) || value < 0 || value > 100)) {
+      return { k: null, d: null, kSeries: [], dSeries: [] };
     }
 
     const stochRsiRaw = [];
@@ -102,21 +103,25 @@ class QuantIndicatorsService {
       }
 
       const range = maxRsi - minRsi;
-      const raw = range === 0 ? 50 : ((rsiSeries[i] - minRsi) / range) * 100;
-      stochRsiRaw.push(Math.max(0, Math.min(100, raw)));
+      // Sabit RSI penceresinde 0/0 tanımsızdır; 50 nötr gözlem anlamına gelmez.
+      const raw = range === 0 ? null : ((rsiSeries[i] - minRsi) / range) * 100;
+      stochRsiRaw.push(raw === null ? null : Math.max(0, Math.min(100, raw)));
     }
 
     // %K = SMA(StochRSI, smoothK)
     const kSeries = [];
     for (let i = 0; i < stochRsiRaw.length; i++) {
       if (i < smoothK - 1) {
-        kSeries.push(stochRsiRaw[i]);
+        kSeries.push(null);
       } else {
         let sum = 0;
+        let valid = true;
         for (let j = 0; j < smoothK; j++) {
-          sum += stochRsiRaw[i - j];
+          const value = stochRsiRaw[i - j];
+          if (!Number.isFinite(value)) valid = false;
+          else sum += value;
         }
-        kSeries.push(parseFloat((sum / smoothK).toFixed(2)));
+        kSeries.push(valid ? sum / smoothK : null);
       }
     }
 
@@ -124,18 +129,21 @@ class QuantIndicatorsService {
     const dSeries = [];
     for (let i = 0; i < kSeries.length; i++) {
       if (i < smoothD - 1) {
-        dSeries.push(kSeries[i]);
+        dSeries.push(null);
       } else {
         let sum = 0;
+        let valid = true;
         for (let j = 0; j < smoothD; j++) {
-          sum += kSeries[i - j];
+          const value = kSeries[i - j];
+          if (!Number.isFinite(value)) valid = false;
+          else sum += value;
         }
-        dSeries.push(parseFloat((sum / smoothD).toFixed(2)));
+        dSeries.push(valid ? sum / smoothD : null);
       }
     }
 
-    const latestK = kSeries[kSeries.length - 1] ?? 50;
-    const latestD = dSeries[dSeries.length - 1] ?? 50;
+    const latestK = kSeries[kSeries.length - 1] ?? null;
+    const latestD = dSeries[dSeries.length - 1] ?? null;
 
     return {
       k: latestK,
@@ -152,11 +160,14 @@ class QuantIndicatorsService {
    * @param {number} n2 Average Length (21)
    */
   calculateWaveTrend(candles, n1 = 10, n2 = 21) {
-    if (!Array.isArray(candles) || candles.length < n1 + n2) {
-      return { wt1: 0, wt2: 0, prevWt1: 0, prevWt2: 0, crossUp: false, crossDown: false, isOversold: false, isOverbought: false };
+    const unknown = () => ({ wt1: null, wt2: null, prevWt1: null, prevWt2: null, crossUp: false, crossDown: false, isOversold: false, isOverbought: false, wt1Series: [], wt2Series: [] });
+    if (!Array.isArray(candles) || ![n1, n2].every(value => Number.isInteger(value) && value > 0) || candles.length < n1 + n2 ||
+      candles.some(candle => !candle || !['high', 'low', 'close'].every(key => Number.isFinite(candle[key])))) {
+      return unknown();
     }
 
     const apSeries = candles.map(c => (c.high + c.low + c.close) / 3);
+    if (apSeries.every(value => value === apSeries[0])) return unknown();
 
     // esa = EMA(ap, n1)
     const alpha1 = 2 / (n1 + 1);
@@ -211,10 +222,10 @@ class QuantIndicatorsService {
     }
 
     const len = wt1Series.length;
-    const wt1 = parseFloat(wt1Series[len - 1].toFixed(2));
-    const wt2 = parseFloat(wt2Series[len - 1].toFixed(2));
-    const pWt1 = len > 1 ? parseFloat(wt1Series[len - 2].toFixed(2)) : wt1;
-    const pWt2 = len > 1 ? parseFloat(wt2Series[len - 2].toFixed(2)) : wt2;
+    const wt1 = wt1Series[len - 1];
+    const wt2 = wt2Series[len - 1];
+    const pWt1 = len > 1 ? wt1Series[len - 2] : wt1;
+    const pWt2 = len > 1 ? wt2Series[len - 2] : wt2;
 
     const crossUp = pWt1 <= pWt2 && wt1 > wt2;
     const crossDown = pWt1 >= pWt2 && wt1 < wt2;
@@ -237,18 +248,14 @@ class QuantIndicatorsService {
    * EMA serisi ve son değerini hesaplar
    */
   calculateEMA(series, period) {
-    if (!Array.isArray(series) || series.length === 0) return 0;
-    if (series.length < period) {
-      const sum = series.reduce((a, b) => a + b, 0);
-      return parseFloat((sum / series.length).toFixed(4));
-    }
+    if (!Array.isArray(series) || !Number.isInteger(period) || period < 1 || series.length < period || series.some(value => !Number.isFinite(value))) return null;
 
     const alpha = 2 / (period + 1);
     let ema = series[0];
     for (let i = 1; i < series.length; i++) {
       ema = alpha * series[i] + (1 - alpha) * ema;
     }
-    return parseFloat(ema.toFixed(4));
+    return ema;
   }
 
   /**
@@ -257,8 +264,9 @@ class QuantIndicatorsService {
    * @param {number} currentPrice Anlık fiyat
    */
   calculatePivots(prevBar, currentPrice) {
-    if (!prevBar || !prevBar.high || !prevBar.low || !prevBar.close) {
-      return { p: currentPrice, s1: currentPrice, s2: currentPrice, r1: currentPrice, r2: currentPrice, pivotDistancePct: 0 };
+    if (!prevBar || !['high', 'low', 'close'].every(key => Number.isFinite(prevBar[key]) && prevBar[key] > 0) ||
+      prevBar.high < prevBar.low || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+      return { p: null, s1: null, s2: null, r1: null, r2: null, pivotDistancePct: null };
     }
 
     const H = prevBar.high;
@@ -271,14 +279,14 @@ class QuantIndicatorsService {
     const R1 = 2 * P - L;
     const R2 = P + (H - L);
 
-    const pivotDistancePct = P > 0 ? parseFloat((Math.abs(currentPrice - P) / P * 100).toFixed(2)) : 0;
+    const pivotDistancePct = Math.abs(currentPrice - P) / P * 100;
 
     return {
-      p: parseFloat(P.toFixed(4)),
-      s1: parseFloat(S1.toFixed(4)),
-      s2: parseFloat(S2.toFixed(4)),
-      r1: parseFloat(R1.toFixed(4)),
-      r2: parseFloat(R2.toFixed(4)),
+      p: P,
+      s1: S1,
+      s2: S2,
+      r1: R1,
+      r2: R2,
       pivotDistancePct
     };
   }
@@ -289,18 +297,19 @@ class QuantIndicatorsService {
    * @param {number} period 20
    */
   calculateDeltaVolume(volumes, period = 20) {
-    if (!Array.isArray(volumes) || volumes.length < 2) return 0;
+    if (!Array.isArray(volumes) || !Number.isInteger(period) || period < 1 || volumes.length < period + 1 ||
+      volumes.some(value => !Number.isFinite(value) || value < 0)) return null;
 
     const currentVol = volumes[volumes.length - 1];
     // Önceki kapanmış 20 mumun ortalaması
     const closedVols = volumes.slice(Math.max(0, volumes.length - 1 - period), volumes.length - 1);
-    if (closedVols.length === 0) return 0;
+    if (closedVols.length === 0) return null;
 
     const avgVol = closedVols.reduce((a, b) => a + b, 0) / closedVols.length;
-    if (avgVol === 0) return 0;
+    if (avgVol === 0) return null;
 
     const deltaVolPct = ((currentVol - avgVol) / avgVol) * 100;
-    return parseFloat(deltaVolPct.toFixed(2));
+    return deltaVolPct;
   }
 
   /**
@@ -359,9 +368,11 @@ class QuantIndicatorsService {
     if (pivotLows.length >= 2) {
       const p1 = pivotLows[pivotLows.length - 2];
       const p2 = pivotLows[pivotLows.length - 1]; // Daha güncel dip
-      if (p2.price < p1.price && p2.rsi > p1.rsi && p1.rsi <= 35) {
+      // Sağdaki iki bar ile ilk kez bu kapanışta teyit edilen pivotu yayınla.
+      // Önceki 30 bardaki aynı çift, sonraki her mumda yeni bir sinyal değildir.
+      if (p2.index === candles.length - 3 && p2.price < p1.price && p2.rsi > p1.rsi && p1.rsi <= 35) {
         hasBullDiv = true;
-        bullDetail = `Price: ${p1.price.toFixed(4)} -> ${p2.price.toFixed(4)} (Daha Düşük Dip), RSI: ${p1.rsi.toFixed(1)} -> ${p2.rsi.toFixed(1)} (Daha Yüksek Dip)`;
+        bullDetail = `Price: ${p1.price} -> ${p2.price} (Daha Düşük Dip), RSI: ${p1.rsi.toFixed(1)} -> ${p2.rsi.toFixed(1)} (Daha Yüksek Dip)`;
       }
     }
 
@@ -371,9 +382,9 @@ class QuantIndicatorsService {
     if (pivotHighs.length >= 2) {
       const p1 = pivotHighs[pivotHighs.length - 2];
       const p2 = pivotHighs[pivotHighs.length - 1]; // Daha güncel tepe
-      if (p2.price > p1.price && p2.rsi < p1.rsi && p1.rsi >= 65) {
+      if (p2.index === candles.length - 3 && p2.price > p1.price && p2.rsi < p1.rsi && p1.rsi >= 65) {
         hasBearDiv = true;
-        bearDetail = `Price: ${p1.price.toFixed(4)} -> ${p2.price.toFixed(4)} (Daha Yüksek Tepe), RSI: ${p1.rsi.toFixed(1)} -> ${p2.rsi.toFixed(1)} (Daha Düşük Tepe)`;
+        bearDetail = `Price: ${p1.price} -> ${p2.price} (Daha Yüksek Tepe), RSI: ${p1.rsi.toFixed(1)} -> ${p2.rsi.toFixed(1)} (Daha Düşük Tepe)`;
       }
     }
 
@@ -384,7 +395,9 @@ class QuantIndicatorsService {
       hasBullDiv,
       hasBearDiv,
       type,
-      detail
+      detail,
+      confirmedAt: type ? (candles[candles.length - 1].openTime ?? null) : null,
+      pivotOpenTime: type ? (candles[candles.length - 3].openTime ?? null) : null
     };
   }
 
@@ -392,9 +405,12 @@ class QuantIndicatorsService {
    * 250 Mumluk Kayan Pencereden tüm temel metrikleri tek seferde çıkarır
    */
   calculateAllMetrics(candles) {
-    if (!Array.isArray(candles) || candles.length < 15) {
+    if (!Array.isArray(candles) || candles.length < 250) {
       return null;
     }
+
+    if (candles.some(c => !c || !['open', 'high', 'low', 'close', 'volume'].every(key =>
+      Number.isFinite(c[key])) || c.close <= 0 || c.low <= 0 || c.high < c.low || c.volume < 0)) return null;
 
     const closes = candles.map(c => c.close);
     const volumes = candles.map(c => c.volume);

@@ -11,6 +11,7 @@ const MultiChartPlugin = (() => {
   ];
 
   let currentSymbol = 'BTWUSDT';
+  let requestGeneration = 0;
   const instances = []; // 4 charts instances
 
   // ─── Matematiksel İndikatör Hesaplayıcılar ─────────────────────
@@ -51,8 +52,8 @@ const MultiChartPlugin = (() => {
     let avgGain = gains / period;
     let avgLoss = losses / period;
 
-    let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    let rsi = 100 - (100 / (1 + rs));
+    const rsiValue = () => avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - (100 / (1 + avgGain / avgLoss));
+    let rsi = rsiValue();
     rsiData.push({ time: klines[period].time, value: +rsi.toFixed(2) });
 
     for (let i = period + 1; i < klines.length; i++) {
@@ -63,8 +64,7 @@ const MultiChartPlugin = (() => {
       avgGain = (avgGain * (period - 1) + gain) / period;
       avgLoss = (avgLoss * (period - 1) + loss) / period;
 
-      rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      rsi = 100 - (100 / (1 + rs));
+      rsi = rsiValue();
       rsiData.push({ time: klines[i].time, value: +rsi.toFixed(2) });
     }
 
@@ -404,18 +404,20 @@ const MultiChartPlugin = (() => {
   }
 
   // ─── Tek Bir Hücrenin Verisini Çek ve Güncelle ─────────────────
-  async function fetchAndRenderCell(inst, symbol) {
+  async function fetchAndRenderCell(inst, symbol, generation) {
     try {
       const res = await fetch(`/api/fapi/v1/klines?symbol=${symbol}&interval=${inst.tf}&limit=${inst.limit}`);
       if (!res.ok) return;
       const rawData = await res.json();
+      if (generation !== requestGeneration || symbol !== currentSymbol) return;
       if (!Array.isArray(rawData) || !rawData.length) return;
 
       // Hassasiyet (Tick Precision): SymbolRegistry resmi kontrat tanımı
-      const precision = (typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getPrecision)
+      const hasMeta = typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getSymbol && SymbolRegistry.getSymbol(symbol);
+      const precision = hasMeta
         ? SymbolRegistry.getPrecision(symbol)
         : detectCoinPrecision(rawData);
-      const minMove = (typeof SymbolRegistry !== 'undefined' && SymbolRegistry.getMinMove)
+      const minMove = hasMeta
         ? SymbolRegistry.getMinMove(symbol)
         : Number(Math.pow(10, -precision).toFixed(precision));
 
@@ -455,6 +457,7 @@ const MultiChartPlugin = (() => {
       }));
 
       inst.rawKlines = klines;
+      inst.symbol = symbol;
 
       // 1. Mumlar
       inst.candleSeries.setData(klines);
@@ -467,7 +470,21 @@ const MultiChartPlugin = (() => {
       }));
       inst.volumeSeries.setData(volData);
 
-      // 3. Bollinger Bantları
+      refreshIndicators(inst);
+
+      // Başlık güncelle
+      const symEl = document.getElementById(`cell-symbol-${inst.index}`);
+      if (symEl) symEl.textContent = `${symbol}.P`;
+
+      inst.mainChart.timeScale().fitContent();
+      inst.rsiChart.timeScale().fitContent();
+    } catch (err) {
+      console.warn(`[MultiChart] ${inst.tf} kline fetch error:`, err);
+    }
+  }
+
+  function refreshIndicators(inst) {
+      const klines = inst.rawKlines;
       const bb = calculateBollingerBands(klines, 20, 2);
       inst.bbUpperSeries.setData(bb.upper);
       inst.bbMiddleSeries.setData(bb.middle);
@@ -507,21 +524,16 @@ const MultiChartPlugin = (() => {
         volEl.textContent = `Vol ${(lastVol > 1000 ? (lastVol / 1000).toFixed(1) + 'K' : lastVol.toFixed(1))}`;
       }
 
-      // Başlık güncelle
-      const symEl = document.getElementById(`cell-symbol-${inst.index}`);
-      if (symEl) symEl.textContent = `${symbol}.P`;
-
-      inst.mainChart.timeScale().fitContent();
-      inst.rsiChart.timeScale().fitContent();
-    } catch (err) {
-      console.warn(`[MultiChart] ${inst.tf} kline fetch error:`, err);
-    }
   }
 
   // ─── Tüm 4 Grafiği Yeni Bir Coine Geçir ────────────────────────
   async function loadSymbol(symbol) {
     currentSymbol = symbol.toUpperCase();
-    const tasks = instances.map(inst => fetchAndRenderCell(inst, currentSymbol));
+    const generation = ++requestGeneration;
+    const tasks = instances.map(inst => {
+      inst.symbol = null;
+      return fetchAndRenderCell(inst, currentSymbol, generation);
+    });
     await Promise.allSettled(tasks);
   }
 
@@ -544,10 +556,12 @@ const MultiChartPlugin = (() => {
       EventBus.on('ws:kline', (data) => {
         if (!data || !data.symbol || data.symbol.toUpperCase() !== currentSymbol) return;
         const inst = instances.find(i => i.tf === data.interval);
-        if (!inst || !data.kline) return;
+        if (!inst || inst.symbol !== currentSymbol || !data.kline) return;
 
         const k = data.kline;
         const barTime = Math.floor(k.openTime / 1000);
+        const last = inst.rawKlines[inst.rawKlines.length - 1];
+        if (last && barTime < last.time) return;
         const candle = {
           time: barTime,
           open: k.open,
@@ -563,6 +577,11 @@ const MultiChartPlugin = (() => {
             value: k.volume,
             color: k.close >= k.open ? 'rgba(14, 203, 129, 0.35)' : 'rgba(246, 70, 93, 0.35)',
           });
+          const fullCandle = { ...candle, volume: k.volume };
+          if (last && last.time === barTime) inst.rawKlines[inst.rawKlines.length - 1] = fullCandle;
+          else inst.rawKlines.push(fullCandle);
+          if (inst.rawKlines.length > 500) inst.rawKlines.splice(0, inst.rawKlines.length - 500);
+          refreshIndicators(inst);
         } catch (e) {}
       });
     }

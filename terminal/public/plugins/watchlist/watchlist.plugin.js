@@ -35,7 +35,7 @@ const WatchlistPlugin = (() => {
       const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
       if (stored) {
         const arr = JSON.parse(stored);
-        if (Array.isArray(arr) && arr.length > 0) {
+        if (Array.isArray(arr)) {
           favoritesSet = new Set(arr);
         }
       }
@@ -123,7 +123,7 @@ const WatchlistPlugin = (() => {
       if (!res.ok) return;
       const data = await res.json();
       allTickers = data;
-      renderTable();
+      renderTable(true);
       updateHeaderCount();
     } catch (e) {
       console.warn('[Watchlist] fetch error:', e);
@@ -228,11 +228,11 @@ const WatchlistPlugin = (() => {
             </span>
           </td>
           <td style="color:#94a3b8;">${formatVolume(t.volUsd)}</td>
-          <td class="wl-fr-cell ${t.fr >= 0 ? 'up' : 'down'}">
-            ${(t.fr * 100).toFixed(4)}% ${t.fr >= 0 ? '↗' : '↘'}
+          <td class="wl-fr-cell ${t.fr == null ? '' : t.fr >= 0 ? 'up' : 'down'}">
+            ${t.fr == null ? '—' : `${(t.fr * 100).toFixed(4)}% ${t.fr >= 0 ? '↗' : '↘'}`}
           </td>
           <td>
-            <span class="wl-fr-badge">${t.frInterval || '8h'}</span>
+            <span class="wl-fr-badge">${t.frInterval || '—'}</span>
           </td>
         </tr>
       `;
@@ -341,8 +341,10 @@ const WatchlistPlugin = (() => {
           // 3. Bellekteki coin verisini güncelle
           const mem = allTickers.find(x => x.symbol === m.s);
           if (mem) {
-            mem.price = newPrice;
+            mem.price = String(m.c);
             mem.chgPct = chgPct;
+            const quoteVolume = Number(m.q);
+            if (m.q !== undefined && Number.isFinite(quoteVolume)) mem.volUsd = quoteVolume;
           }
         });
       } catch (err) {}
@@ -372,6 +374,7 @@ const WatchlistPlugin = (() => {
       const res = await fetch(`/api/favorites/analytics?symbol=${sym}`);
       if (!res.ok) throw new Error('Veri yok');
       const data = await res.json();
+      if (sym !== activeSymbol) return;
       if (!data || !data.metrics) return;
 
       const m = data.metrics;
@@ -398,6 +401,7 @@ const WatchlistPlugin = (() => {
       strkEl.textContent = `${m.currentStreak.count}G ${isStreakUp ? 'Yeşil 🟢' : 'Kırmızı 🔴'}`;
       strkEl.className = `chip-val ${isStreakUp ? 'green' : 'red'}`;
     } catch (e) {
+      if (sym !== activeSymbol) return;
       if (emaEl) emaEl.textContent = 'Yükleniyor...';
       if (athEl) athEl.textContent = '—';
       if (atlEl) atlEl.textContent = '—';

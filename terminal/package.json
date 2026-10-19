@@ -6,11 +6,16 @@
   "scripts": {
     "start": "node terminal-server.js",
     "test:regression": "node review/terminal-regression-tests.cjs",
-    "test:quant": "node review/quant-accuracy-verification.cjs",
+    "test:quant": "node review/strategy-accuracy-tests.cjs",
+    "test:engine": "node --test review/market-engine.test.cjs",
+    "test:services": "node --test review/server-services.test.cjs",
+    "test:frontend": "node review/frontend-audit-tests.cjs",
+    "test:live": "node review/live-market-smoke.cjs",
     "test:followup": "node review/terminal-followup-tests.cjs",
-    "test": "node review/terminal-regression-tests.cjs && node review/quant-accuracy-verification.cjs"
+    "test": "node review/terminal-regression-tests.cjs && node review/terminal-followup-tests.cjs && node review/strategy-accuracy-tests.cjs && node review/frontend-audit-tests.cjs && node --test review/market-engine.test.cjs review/server-services.test.cjs review/http-smoke.test.cjs"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "ws": "^8.21.3"
   }
 }

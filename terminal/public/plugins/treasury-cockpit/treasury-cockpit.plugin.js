@@ -331,7 +331,7 @@ const TreasuryCockpitPlugin = (() => {
             
             <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:6px; padding:10px; font-size:12px; color:#6ee7b7; line-height:1.5;">
               🛡️ <b>Maksimum Güvenlik Garantisi:</b><br />
-              Binance hesabınızda API oluştururken <b>yalnızca "Can Read" (Sadece Okuma)</b> kutusunu işaretleyiniz. Alım-Satım veya Çekim izinlerine ASLA ihtiyaç yoktur ve sistem bu izinleri kabul etmez.
+              Uygulama yalnızca okuma uç noktalarını kullanır. Binance hesabınızda API oluştururken <b>yalnızca "Can Read" (Sadece Okuma)</b> iznini veriniz; alım-satım veya çekim yetkisi eklemeyiniz.
             </div>
 
             <div class="calc-form">
@@ -977,7 +977,7 @@ const TreasuryCockpitPlugin = (() => {
             feedback.style.background = 'rgba(16,185,129,0.18)';
             feedback.style.color = '#34d399';
             feedback.style.border = '1px solid rgba(16,185,129,0.4)';
-            feedback.innerHTML = `✅ <b>Bağlantı Başarılı!</b> Sadece Okuma (Read-Only) erişimi teyit edildi.<br/>Cüzdan Bakiyesi: $${data.testResult.totalWalletBalance}`;
+            feedback.innerHTML = `✅ <b>Bağlantı doğrulandı.</b> Uygulama yalnızca okuma uç noktalarını kullanır.<br/>Cüzdan Bakiyesi: $${data.testResult.totalWalletBalance}`;
             
             await fetchBinanceStatus();
             await fetchBinancePositions();

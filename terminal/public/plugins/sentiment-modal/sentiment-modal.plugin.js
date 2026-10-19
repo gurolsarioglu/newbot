@@ -6,6 +6,8 @@ const TickerSnapshot = (() => {
   let activeSymbol = 'BTWUSDT';
   let modalOpen = false;
   let updateTimer = null;
+  let requestGeneration = 0;
+  let modalGeneration = 0;
 
   function formatPrice(val) {
     if (typeof PriceFormatter !== 'undefined' && PriceFormatter.format) {
@@ -32,6 +34,9 @@ const TickerSnapshot = (() => {
 
   async function updateSymbol(symbol) {
     activeSymbol = symbol.toUpperCase();
+    const targetSymbol = activeSymbol;
+    const generation = ++requestGeneration;
+    const isCurrent = () => generation === requestGeneration && targetSymbol === activeSymbol;
 
     const symEl = document.getElementById('snap-symbol');
     if (symEl) symEl.textContent = `${activeSymbol}.P`;
@@ -46,9 +51,11 @@ const TickerSnapshot = (() => {
         fetch(`/api/fapi/v1/premiumIndex?symbol=${activeSymbol}`),
         fetch(`/api/fapi/v1/openInterest?symbol=${activeSymbol}`)
       ]);
+      if (!isCurrent()) return;
 
       if (tickerRes.status === 'fulfilled' && tickerRes.value.ok) {
         const t = await tickerRes.value.json();
+        if (!isCurrent()) return;
         const rawPrice = t.lastPrice !== undefined && t.lastPrice !== null ? String(t.lastPrice) : '0';
         const chg = parseFloat(t.priceChangePercent || 0);
 
@@ -67,6 +74,7 @@ const TickerSnapshot = (() => {
 
       if (fundingRes.status === 'fulfilled' && fundingRes.value.ok) {
         const f = await fundingRes.value.json();
+        if (!isCurrent()) return;
         const frVal = parseFloat(f.lastFundingRate || 0) * 100;
         const frEl = document.getElementById('snap-funding-val');
         if (frEl) {
@@ -89,6 +97,7 @@ const TickerSnapshot = (() => {
 
       if (oiRes.status === 'fulfilled' && oiRes.value.ok) {
         const oi = await oiRes.value.json();
+        if (!isCurrent()) return;
         const oiEl = document.getElementById('snap-oi-num');
         if (oiEl) {
           oiEl.textContent = formatNumber(Math.round(parseFloat(oi.openInterest || 0)));
@@ -106,64 +115,27 @@ const TickerSnapshot = (() => {
 
   // ─── Modal Verilerini Çek ve Barları Güncelle ───────────────────
   async function fetchAndRenderModalData() {
+    const targetSymbol = activeSymbol;
+    const generation = ++modalGeneration;
     try {
-      const res = await fetch(`/api/sentiment?symbol=${activeSymbol}`);
+      const res = await fetch(`/api/sentiment?symbol=${targetSymbol}`);
       if (!res.ok) return;
       const data = await res.json();
+      if (generation !== modalGeneration || targetSymbol !== activeSymbol) return;
 
-      // 1. ORDER BOOK (Depth)
-      const ob = data.orderBook || { bidPct: 50, askPct: 50 };
-      const obB = document.getElementById('modal-val-ob-b');
-      const obS = document.getElementById('modal-val-ob-s');
-      const obBar = document.getElementById('modal-bar-ob');
-      if (obB && obS && obBar) {
-        obB.textContent = `B ${ob.bidPct.toFixed(2)}%`;
-        obS.textContent = `${ob.askPct.toFixed(2)}% S`;
-        obBar.style.width = `${ob.bidPct}%`;
+      function renderRatio(values, leftKey, rightKey, leftId, rightId, barId, leftLabel = 'L', rightLabel = 'S') {
+        const left = values?.[leftKey], right = values?.[rightKey];
+        const available = typeof left === 'number' && Number.isFinite(left) && typeof right === 'number' && Number.isFinite(right);
+        const leftEl = document.getElementById(leftId), rightEl = document.getElementById(rightId), barEl = document.getElementById(barId);
+        if (leftEl) leftEl.textContent = available ? `${leftLabel} ${left.toFixed(2)}%` : 'VERİ YOK';
+        if (rightEl) rightEl.textContent = available ? `${right.toFixed(2)}% ${rightLabel}` : '—';
+        if (barEl) barEl.style.width = available ? `${left}%` : '0%';
       }
-
-      // 2. LONG/SHORT POSITIONS (Balina Net Pozisyon)
-      const pos = data.topPosition || { longPct: 50, shortPct: 50 };
-      const posL = document.getElementById('modal-val-pos-l');
-      const posS = document.getElementById('modal-val-pos-s');
-      const posBar = document.getElementById('modal-bar-pos');
-      if (posL && posS && posBar) {
-        posL.textContent = `L ${pos.longPct.toFixed(2)}%`;
-        posS.textContent = `${pos.shortPct.toFixed(2)}% S`;
-        posBar.style.width = `${pos.longPct}%`;
-      }
-
-      // Snapshot'taki ana L/S çubuğunu da senkronize et!
-      const snapTrack = document.getElementById('snap-ls-fill');
-      const snapL = document.getElementById('snap-ls-lbl-l');
-      const snapS = document.getElementById('snap-ls-lbl-s');
-      if (snapTrack && snapL && snapS) {
-        snapTrack.style.width = `${pos.longPct}%`;
-        snapL.textContent = `L ${pos.longPct.toFixed(2)}%`;
-        snapS.textContent = `${pos.shortPct.toFixed(2)}% S`;
-      }
-
-      // 3. TRADER POSITIONING (Balina Hesap Oranı)
-      const acc = data.topAccount || { longPct: 50, shortPct: 50 };
-      const accL = document.getElementById('modal-val-acc-l');
-      const accS = document.getElementById('modal-val-acc-s');
-      const accBar = document.getElementById('modal-bar-acc');
-      if (accL && accS && accBar) {
-        accL.textContent = `L ${acc.longPct.toFixed(2)}%`;
-        accS.textContent = `${acc.shortPct.toFixed(2)}% S`;
-        accBar.style.width = `${acc.longPct}%`;
-      }
-
-      // 4. MARKET EXPOSURE (Perakende Dağılımı)
-      const glob = data.globalExposure || { longPct: 50, shortPct: 50 };
-      const globL = document.getElementById('modal-val-glob-l');
-      const globS = document.getElementById('modal-val-glob-s');
-      const globBar = document.getElementById('modal-bar-glob');
-      if (globL && globS && globBar) {
-        globL.textContent = `L ${glob.longPct.toFixed(2)}%`;
-        globS.textContent = `${glob.shortPct.toFixed(2)}% S`;
-        globBar.style.width = `${glob.longPct}%`;
-      }
+      renderRatio(data.orderBook, 'bidPct', 'askPct', 'modal-val-ob-b', 'modal-val-ob-s', 'modal-bar-ob', 'B', 'S');
+      renderRatio(data.topPosition, 'longPct', 'shortPct', 'modal-val-pos-l', 'modal-val-pos-s', 'modal-bar-pos');
+      renderRatio(data.topPosition, 'longPct', 'shortPct', 'snap-ls-lbl-l', 'snap-ls-lbl-s', 'snap-ls-fill');
+      renderRatio(data.topAccount, 'longPct', 'shortPct', 'modal-val-acc-l', 'modal-val-acc-s', 'modal-bar-acc');
+      renderRatio(data.globalExposure, 'longPct', 'shortPct', 'modal-val-glob-l', 'modal-val-glob-s', 'modal-bar-glob');
     } catch (e) {
       console.warn('[ModalData] fetch error:', e);
     }

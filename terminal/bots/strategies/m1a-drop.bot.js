@@ -44,8 +44,11 @@ class M1ADropBot extends BaseBot {
     if (rawStr && typeof rawStr === 'string' && rawStr.includes('/')) {
       return rawStr.trim();
     }
-    const k = Math.round(parseFloat(kVal || 50));
-    const d = Math.round(parseFloat(dVal || 50));
+    const kNum = this.parseMetric(kVal, 0, 100);
+    const dNum = this.parseMetric(dVal, 0, 100);
+    if (kNum === null || dNum === null) return '—';
+    const k = Math.round(kNum);
+    const d = Math.round(dNum);
     return `${k}/${d}`;
   }
 
@@ -56,9 +59,7 @@ class M1ADropBot extends BaseBot {
    * 3. Çok küçük hareketler (< 0.50%) gürültü olarak elenir
    */
   evaluateM1A({ valNum, volNum, explicitType, explicitDot }) {
-    if (explicitType && explicitDot) {
-      return { valid: true, type: explicitType, dot: explicitDot };
-    }
+    if (!Number.isFinite(valNum) || !Number.isFinite(volNum)) return { valid: false, reason: 'Fiyat/hacim verisi eksik.' };
 
     // Mikro gürültü filtresi
     if (Math.abs(valNum) < 0.50) {
@@ -83,13 +84,16 @@ class M1ADropBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const priceNum = parseFloat(s.price || 0);
-    const rawVal = s.dropValue !== undefined ? s.dropValue : (s.drop !== undefined ? s.drop : (s.boost !== undefined ? s.boost : (s.position === 'Short' ? -1.05 : 1.10)));
-    const valNum = this.parseDropOrBoost(rawVal);
-    const volNum = this.parseVolumeChange(s.volume || (valNum < 0 ? -1.50 : 2.50));
+    const priceNum = Number(s.price);
+    const rawVal = s.dropValue ?? s.drop ?? s.boost ?? s.boostValue;
+    const valNum = this.parseMetric(rawVal);
+    const volNum = this.parseMetric(s.volume);
+    const rsiNum = this.parseMetric(s.rsi, 0, 100);
+    if (!Number.isFinite(priceNum) || priceNum <= 0 || valNum === null || volNum === null || rsiNum === null) return null;
 
     // M1-A Karar Motoru
     const explicitType = s.type || (s.position === 'Short' ? 'drop' : (s.position === 'Long' ? 'boost' : null));
@@ -112,7 +116,7 @@ class M1ADropBot extends BaseBot {
     // prevPrice güvenliği (Çift Yönlü Formül):
     // Drop (🔴): Fiyat düştü -> prevPrice > currentPrice: currentPrice / (1 + valNum/100)
     // Boost (🟢): Fiyat arttı -> prevPrice < currentPrice: currentPrice / (1 + valNum/100)
-    let prevPriceStr = s.prevPrice ? String(s.prevPrice) : '';
+    let prevPriceStr = Number(s.prevPrice) > 0 ? String(s.prevPrice) : '';
     if (!prevPriceStr || prevPriceStr === String(s.price)) {
       if (priceNum > 0 && valNum !== 0) {
         prevPriceStr = computePrevPrice(priceNum, valNum, s.price);
@@ -125,8 +129,6 @@ class M1ADropBot extends BaseBot {
     const volFormatted = volNum >= 0 ? `+${volNum.toFixed(2)}%` : `${volNum.toFixed(2)}%`;
 
     // RSI Değerleri (Aşırı değerde ⚠️ alarmı: <= 30 veya >= 70)
-    const rawRsi = parseInt(s.rsi, 10);
-    const rsiNum = !isNaN(rawRsi) ? rawRsi : (valNum < 0 ? 30 : 75);
     const rsiFormatted = `${rsiNum}${rsiNum >= 70 || rsiNum <= 30 ? ' ⚠️' : ''}`;
 
     // Stochastic formatı (K <= 20 veya K >= 80 ise ⚠️ alarmı)
@@ -142,7 +144,6 @@ class M1ADropBot extends BaseBot {
     }
 
     const card = {
-      id: 'm1a_' + Date.now(),
       symbol: symbol,
       type: type,
       dot: dot,
@@ -153,12 +154,12 @@ class M1ADropBot extends BaseBot {
       volume: volFormatted,
       rsi: rsiFormatted,
       stochastic: stochFormatted,
-      btcStatus: s.btcStatus || 'Normal',
+      btcStatus: s.btcStatus || '—',
       dateLabel: 'Bugün',
       time: nowTime
     };
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 

@@ -12,7 +12,7 @@ const symbolRegistry = require('./symbol-registry.service');
  * Verilen fiyat değerinin gerçek ondalık basamak sayısını tespit eder.
  */
 function getDecimalPlaces(val, symbol = null) {
-  if (symbol) {
+  if (symbol && symbolRegistry.getSymbol(symbol)) {
     return symbolRegistry.getPrecision(symbol);
   }
 
@@ -20,6 +20,8 @@ function getDecimalPlaces(val, symbol = null) {
 
   // String olarak geldiyse orijinal basamak sayısını tespit et
   const str = String(val).trim();
+  const scientific = str.match(/^[+-]?\d+(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  if (scientific) return Math.min(100, Math.max(0, (scientific[1] || '').length - Number(scientific[2])));
   if (str.includes('.') && !str.includes('e') && !str.includes('E')) {
     const fraction = str.split('.')[1];
     return fraction.length;
@@ -46,16 +48,18 @@ function formatCryptoPrice(rawPrice, precisionOrSymbol = null) {
 
   // 1. Eğer parametre bir sembol string'i ise (örn: 'BTCUSDT', 'DOGEUSDT')
   if (typeof precisionOrSymbol === 'string' && isNaN(Number(precisionOrSymbol))) {
+    if (!symbolRegistry.getSymbol(precisionOrSymbol)) return formatCryptoPrice(rawPrice);
     const precision = symbolRegistry.getPrecision(precisionOrSymbol);
-    const n = typeof rawPrice === 'number' ? rawPrice : parseFloat(rawPrice);
-    if (isNaN(n)) return '0.00';
+    const n = Number(rawPrice);
+    if (!Number.isFinite(n)) return '0.00';
     return n.toFixed(precision);
   }
 
   // 2. Eğer açıkça bir sayısal precision belirtilmişse
   if (typeof precisionOrSymbol === 'number') {
-    const n = typeof rawPrice === 'number' ? rawPrice : parseFloat(rawPrice);
-    if (isNaN(n)) return '0.00';
+    const n = Number(rawPrice);
+    if (!Number.isFinite(n)) return '0.00';
+    if (!Number.isInteger(precisionOrSymbol) || precisionOrSymbol < 0 || precisionOrSymbol > 100) return '0.00';
     return n.toFixed(precisionOrSymbol);
   }
 
@@ -67,8 +71,8 @@ function formatCryptoPrice(rawPrice, precisionOrSymbol = null) {
     }
   }
 
-  const num = typeof rawPrice === 'number' ? rawPrice : parseFloat(rawPrice);
-  if (isNaN(num)) return '0.00';
+  const num = Number(rawPrice);
+  if (!Number.isFinite(num)) return '0.00';
   if (num === 0) return '0.00';
 
   const dec = getDecimalPlaces(rawPrice);
@@ -86,11 +90,9 @@ function formatPrice(rawPrice, symbol) {
  * Boost/Drop oranına göre önceki fiyatı (prevPrice) orijinal hassasiyeti koruyarak hesaplar.
  */
 function computePrevPrice(priceNum, changePct, originalPriceOrSymbol) {
-  if (!priceNum || isNaN(priceNum) || !changePct || isNaN(changePct)) {
-    return originalPriceOrSymbol ? String(originalPriceOrSymbol) : '0.00';
-  }
+  if (!Number.isFinite(Number(priceNum)) || Number(priceNum) <= 0 || !Number.isFinite(Number(changePct)) || Number(changePct) <= -100) return '0.00';
 
-  const computed = priceNum / (1 + changePct / 100);
+  const computed = Number(priceNum) / (1 + Number(changePct) / 100);
   let decimals = 2;
   if (typeof originalPriceOrSymbol === 'string' && isNaN(Number(originalPriceOrSymbol))) {
     decimals = symbolRegistry.getPrecision(originalPriceOrSymbol);

@@ -30,22 +30,27 @@ class V3VolumeBot extends BaseBot {
    * Örn: 42158400, 'PEPE' -> '42.158.400 PEPE'
    */
   formatVolume24h(val, baseAsset) {
-    if (!val) return `1.000.000 ${baseAsset}`;
-    
-    // Eğer string zaten coin birimi içeriyorsa doğrudan temizle ve dön
-    if (typeof val === 'string' && val.includes(baseAsset)) {
-      return val.trim();
-    }
-
-    // Sayısal değeri çıkar
-    const cleanNum = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.]/g, ''));
-    if (isNaN(cleanNum) || cleanNum <= 0) {
-      return `1.000.000 ${baseAsset}`;
-    }
+    if (val === undefined || val === null || val === '') return '—';
+    const cleanNum = this.parseVolume24h(val);
+    if (cleanNum === null) return '—';
 
     // Binlik basamak formatı (noktalı)
     const formattedNum = Math.round(cleanNum).toLocaleString('tr-TR');
     return `${formattedNum} ${baseAsset}`;
+  }
+
+  parseVolume24h(val) {
+    if (val === undefined || val === null || val === '') return null;
+    let number = val;
+    if (typeof val !== 'number') {
+      const match = String(val).match(/[+-]?(?:\d[\d.,]*|\.\d+)/);
+      if (!match) return null;
+      let raw = match[0];
+      if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
+      else if ((raw.match(/\./g) || []).length > 1) raw = raw.replace(/\./g, '');
+      number = Number(raw);
+    }
+    return Number.isFinite(number) && number >= 0 ? number : null;
   }
 
   /**
@@ -55,20 +60,16 @@ class V3VolumeBot extends BaseBot {
    * 3. İllikit çöp coin filtresi: 24 saatlik baz hacim en az 500 birim olmalıdır
    */
   validateVolumeSurge({ volumeChangeNum, volume24hRaw }) {
+    if (!Number.isFinite(volumeChangeNum) || volume24hRaw === undefined || volume24hRaw === null || volume24hRaw === '') {
+      return { valid: false, reason: 'Gerçek hacim verisi eksik.' };
+    }
     if (volumeChangeNum < 8.00) {
       return { valid: false, reason: `Hacim artışı (%${volumeChangeNum.toFixed(2)}) yetersiz (Min +%8.00 olmalı).` };
     }
 
     if (volume24hRaw !== undefined && volume24hRaw !== null) {
-      let rawStr = String(volume24hRaw).trim();
-      // '25.000.000' veya '42.158.400' gibi binlik noktalarını temizle
-      if ((rawStr.match(/\./g) || []).length > 1) {
-        rawStr = rawStr.replace(/\./g, '');
-      } else if (rawStr.includes('.') && rawStr.includes(',')) {
-        rawStr = rawStr.replace(/\./g, '').replace(',', '.');
-      }
-      const num24 = typeof volume24hRaw === 'number' ? volume24hRaw : parseFloat(rawStr.replace(/[^0-9.]/g, ''));
-      if (!isNaN(num24) && num24 > 0 && num24 < 500) {
+      const num24 = this.parseVolume24h(volume24hRaw);
+      if (num24 === null || num24 < 500) {
         return { valid: false, reason: `24s baz hacim (${num24}) çok düşük; illikit yapay hareket riski.` };
       }
     }
@@ -77,17 +78,18 @@ class V3VolumeBot extends BaseBot {
   }
 
   ingest(s) {
-    const symbol = (s.coin || s.symbol).toUpperCase();
+    if (!s || !(s.coin || s.symbol)) return null;
+    const symbol = String(s.coin || s.symbol).trim().toUpperCase();
     const baseAsset = symbol.replace('USDT', '');
     const nowTime = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
     // Hacim artışını parse et
-    const volChangeNum = this.parseVolumeChange(s.hacimChange || s.volumeChange || s.volumeSurge || s.boost);
+    const volChangeNum = this.parseMetric(s.hacimChange ?? s.volumeChange ?? s.volumeSurge ?? s.boost);
     
     // Doğrulama Filtresi
     const validation = this.validateVolumeSurge({
       volumeChangeNum: volChangeNum,
-      volume24hRaw: s.hacim24s || s.volume24h || s.volume
+      volume24hRaw: s.hacim24s ?? s.volume24h ?? s.volume
     });
 
     if (!validation.valid) {
@@ -96,10 +98,9 @@ class V3VolumeBot extends BaseBot {
     }
 
     const volChangeFormatted = `+${volChangeNum.toFixed(2)}%`;
-    const vol24sFormatted = this.formatVolume24h(s.hacim24s || s.volume24h || s.volume, baseAsset);
+    const vol24sFormatted = this.formatVolume24h(s.hacim24s ?? s.volume24h ?? s.volume, baseAsset);
 
     const card = {
-      id: 'v3_' + Date.now(),
       symbol: symbol,
       hacimChange: volChangeFormatted,
       hacim24s: vol24sFormatted,
@@ -107,7 +108,7 @@ class V3VolumeBot extends BaseBot {
       time: nowTime
     };
 
-    return this.addSignal(card);
+    return this.addSignal({ ...card, ...this.signalMetadata(s) });
   }
 }
 
