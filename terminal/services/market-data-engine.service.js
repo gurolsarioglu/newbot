@@ -364,7 +364,12 @@ class MarketDataEngine extends EventEmitter {
 
         // Anlık M1-A ve M1-Premium Radar Olayları (%100 Bağımsız Yerel Motor)
         // Yalnızca 24s hacmi $1M üzerinde olan ve en az %0.70 hareket eden gerçek pariteler taranır
-        if (quoteVol >= 1000000) {
+        // Zamanlama (Visivero uyumu): ilk eşik geçişinde değil, mumun M1_SCAN_SECOND. saniyesinden sonra
+        // değerlendirilir; eşik o anda hâlâ aşılıyorsa mum başına tek alarm üretilir.
+        const scanSec = parseInt(process.env.M1_SCAN_SECOND || '45', 10);
+        const secInMin = (now % 60000) / 1000;
+        if (quoteVol >= 1000000 && secInMin >= scanSec && !m1State.alerted) {
+          if (Math.abs(effChgPct) >= 0.70) m1State.alerted = true;
           if (effChgPct <= -0.70) {
             this.emit('radarAlert', {
               type: 'm1a',

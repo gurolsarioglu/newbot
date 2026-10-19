@@ -962,3 +962,4 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 - **Konuşmalarımız:** Hedef botların Visivero ile birebir aynı Volume değerini vermesi (BRUSDT 23:11 örneği).
 - **Doğrulama:** node --check başarılı; canlı karşılaştırma bekleniyor.
 
+- **Zamanlama:** market-data-engine.service.js M1 alarmı ilk eşik geçişinde değil, mumun M1_SCAN_SECOND (varsayılan 45). saniyesinden sonra, mum başına bir kez veriliyor. Visivero'nun gerçek saniyesi ölçülüp kalibre edilecek.
