@@ -955,3 +955,10 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 5. **Açık risk:** Visivero'nun tam tetik anı ve hacim tanımı (base/quote) kanıtlanmadı; yeni canlı karşılaştırmayla doğrulanacak.
 
 
+
+# 19.10.2026
+- **Yaptıklarımız:** M1-A/M1-P hacim hesabı düzeltildi. bots/index.js _computeM1Metrics artık canlı mum hacmini Binance 1m kline quoteVolume'dan alıyor. WS miniTicker 24s kayan pencere olduğu için (quoteVol - startVol) eksik çıkıyordu. WS yalnızca yedek.
+- **Düşündüklerimiz:** Visivero Volume = (canlı mum USDT hacmi - önceki mum hacmi) / önceki mum hacmi. Fiyat farkı ise alarm anı farkından (bizde eşiği ilk geçişte, Visivero daha geç).
+- **Konuşmalarımız:** Hedef botların Visivero ile birebir aynı Volume değerini vermesi (BRUSDT 23:11 örneği).
+- **Doğrulama:** node --check başarılı; canlı karşılaştırma bekleniyor.
+

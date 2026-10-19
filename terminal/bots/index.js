@@ -369,9 +369,12 @@ class BotManager {
 
     const pct = ((alert.price - prevK.close) / prevK.close) * 100;
 
-    let curVol = alert.candleQuoteVol;
+    // Canlı mum hacmi: Binance'in kendi 1m mum quoteVolume değeri birincil kaynaktır (Visivero ile aynı kaynak).
+    // WS miniTicker 24s KAYAN pencere olduğundan (quoteVol - startVol) eski dakikanın düşmesiyle eksik çıkar;
+    // bu yüzden yalnızca yedek olarak kullanılır.
+    let curVol = curK && curK.quoteVolume >= 0 ? curK.quoteVolume : null;
     if (curVol === null || curVol === undefined) {
-      curVol = curK ? curK.quoteVolume : null;
+      curVol = alert.candleQuoteVol;
     }
     let volDelta = null;
     if (curVol !== null && prevK.quoteVolume > 0) {
