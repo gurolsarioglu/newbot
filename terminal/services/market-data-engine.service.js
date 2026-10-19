@@ -462,6 +462,38 @@ class MarketDataEngine extends EventEmitter {
   }
 
   /**
+   * Sinyal anında en güncel ve canlı mumları doğrudan Binance REST ile çeker
+   * Son mum: Canlı oluşan 1m mumu (güncel hacim ve açılış fiyatı)
+   * Sondan bir önceki mum: Kapanmış önceki 1m mumu (referans hacim)
+   */
+  async getFreshKlines(symbol, interval = '1m', limit = 16) {
+    if (!symbol) return [];
+    const cleanSym = String(symbol).toUpperCase().trim();
+    try {
+      const raw = await this.safeFetch(
+        `https://fapi.binance.com/fapi/v1/klines?symbol=${cleanSym}&interval=${interval}&limit=${limit}`,
+        1
+      );
+      if (Array.isArray(raw)) {
+        return raw.map(k => ({
+          time: Math.floor(k[0] / 1000),
+          openTime: k[0],
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4]),
+          volume: parseFloat(k[5]),
+          closeTime: k[6],
+          quoteVolume: parseFloat(k[7])
+        }));
+      }
+    } catch (e) {
+      console.warn(`[MarketDataEngine] ${cleanSym} fresh klines hatasi:`, e.message);
+    }
+    return [];
+  }
+
+  /**
    * Sembolün en güncel ticker bilgisini döner
    */
   getTicker(symbol) {

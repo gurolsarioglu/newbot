@@ -895,3 +895,27 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
    - `terminal/public/plugins/bot-hub/bot-renderer.js`: M1-A kart oluşturucusu `isDrop` kontrolüyle `🟢 Boost Value` ve `🔴 Drop Value` etiketlerini, dinamik renkleri ve Visivero tarzı cyan `#38bdf8` `#SYMBOL` etiketini destekleyecek şekilde güncellendi.
    - `terminal/public/styles/terminal-pro.css`: Ortalanmış gri kapsül tarih ayracı (`.signal-date-divider span { background: #232733; padding: 3px 18px; border-radius: 999px; }`) eklenerek Visivero'nun "Bugün" rozetiyle birebir görsel uyum sağlandı.
 4. **Git Takibi:** Tüm değişiklikler commit edilerek takip altına alındı.
+
+## 🔬 5. Kullanıcı OPGUSDT (21:49) Ekran Görüntüsü Karşılaştırması & Hacim (Volume Delta) Matematiksel Çözümü
+1. **Kullanıcı Karşılaştırması:**
+   - 1. Ekran (Visivero): Saat 21:49'da `🔴 #OPGUSDT`, `Drop Value: -1.02%`, `Current Price: 0.1259`, `Previous Price: 0.1272`, `Volume: -25.66%`, `RSI: 16 ⚠️`, `Stochastic: 19/31`.
+   - 2. Ekran (Bizim Terminal): Saat 21:49'da `🔴 #OPGUSDT`, `Drop Value: -0.78%`, `Current Price: 0.1264`, `Previous Price: 0.1274`, `Volume: +572.16%`, `RSI: 19 ⚠️`, `Stochastic: 28/40`.
+2. **Hacim Uyumsuzluğunun Kök Nedeni & Matematiksel Kanıtı:**
+   - Binance API doğrudan sorgulanarak 21:48 ve 21:49 mumlarının resmi verileri incelendi:
+     - 21:48 mumu (önceki tamamlanan mum): Hacim = `395,066` adet
+     - 21:49 mumu (anlık düşüş mumu): Açılış fiyatı = `0.1272` (Visivero'nun `Previous Price` değeri tam olarak bu açılış fiyatıdır). Sinyal anında canlı hacim = `293,692` adet.
+     - **Visivero'nun Hacim Formülü:**
+       $$\text{Volume Delta} = \frac{V_{canlı\_1m} - V_{önceki\_1m}}{V_{önceki\_1m}} \times 100 = \frac{293,692 - 395,066}{395,066} \times 100 = \mathbf{-25.66\%}$$
+     - Matematik virgülden sonra yüzde 100 örtüşmektedir.
+   - Bizim terminalimizde `+572.16%` çıkmasının nedeni: `klineBuffers` belleğinde canlı 1m mumunun henüz güncellenmemiş olması ve sistemin 21:48 mumu ile 21:47 mumu (önceki sert hacim patlaması) arasındaki eski mumu kıyaslamasından kaynaklanıyordu.
+3. **Uygulanan Çözümler:**
+   - `services/market-data-engine.service.js`: `getFreshKlines(sym, '1m', 16)` metodu eklenerek sinyal tetiklendiğinde doğrudan Binance'ten en güncel canlı mum ve önceki kapanan mum çekildi.
+   - `bots/index.js`:
+     - `Previous Price` doğrudan canlı 1m mumunun açılış fiyatına (`curK.open`) bağlandı.
+     - `Drop Value / Boost Value` bu açılış fiyatına göre kesin hesaplandı.
+     - `Volume Delta` formülü $(\frac{V_{cur} - V_{prev}}{V_{prev}} \times 100)$ olarak canlı mumlar üzerinden bağlandı.
+   - `public/plugins/bot-hub/bot-renderer.js` & `public/styles/terminal-pro.css`:
+     - Mesaj içeriği Visivero ile birebir özdeş hale getirildi: İki yana yaslama (`space-between`) yerine, yan yana satır içi (`inline flex-start`, `gap: 6px`) formatına geçirildi.
+     - Yazı renkleri Visivero'daki gibi sade beyaz, sembol `#SYMBOL` mavi/turkuaz, alt bilgiye ise harici link SVG ikonu ve gri zaman damgası eklendi.
+4. **Git Takibi:** Tüm değişiklikler commit edilerek sunucu daemon olarak yeniden başlatıldı.
+

@@ -760,7 +760,7 @@ const BotRenderer = (() => {
             </div>
             <div class="card-field-row">
               <span>${label}</span>
-              <span style="color: ${valColor}; font-weight: 700;">${valText}</span>
+              <span class="card-field-val">${valText}</span>
             </div>
             <div class="card-field-row">
               <span>Current Price:</span>
@@ -772,28 +772,24 @@ const BotRenderer = (() => {
             </div>
             <div class="card-field-row">
               <span>Volume:</span>
-              <span style="color: ${typeof s.volume === 'string' && s.volume.startsWith('-') ? 'var(--red)' : 'var(--green)'}; font-weight: 600;">
-                ${typeof s.volume === 'object' && s.volume ? (s.volume.m1 || JSON.stringify(s.volume)) : (s.volume || '—')}
-              </span>
+              <span class="card-field-val">${typeof s.volume === 'object' && s.volume ? (s.volume.m1 || JSON.stringify(s.volume)) : (s.volume || '—')}</span>
             </div>
             <div class="card-field-row">
               <span>RSI:</span>
-              <span class="card-field-val">
-                ${rsiDisplay}
-              </span>
+              <span class="card-field-val">${rsiDisplay}</span>
             </div>
             <div class="card-field-row">
               <span>Stochastic (K/D):</span>
-              <span class="card-field-val">
-                ${stochDisplay}
-              </span>
+              <span class="card-field-val">${stochDisplay}</span>
             </div>
             <div class="card-field-row">
               <span>BTC Status:</span>
-              <span style="color: #94a3b8; font-weight: 500;">${s.btcStatus || 'Normal'}</span>
+              <span class="card-field-val">${s.btcStatus || 'Normal'}</span>
             </div>
             <div class="card-footer">
-              <span class="card-link-icon" title="1. Ekranda Aç">↗ Grafikte Göster</span>
+              <span class="card-link-icon" title="1. Ekranda Aç">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </span>
               <span class="card-time">${displayTime}</span>
             </div>
           </div>

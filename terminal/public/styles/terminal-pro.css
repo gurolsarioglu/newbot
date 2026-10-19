@@ -1276,16 +1276,22 @@ html, body {
 .card-field-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 12.5px;
-  color: #8fa0b5;
-  margin-bottom: 4.5px;
+  justify-content: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  color: #ffffff;
+  margin-bottom: 3.5px;
   line-height: 1.35;
+}
+
+.card-field-row > span:first-child {
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .card-field-val {
   color: #ffffff;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
@@ -1332,28 +1338,35 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+  padding-top: 2px;
+  border-top: none;
   font-size: 11px;
-  color: var(--text-dim);
 }
 
 .card-link-icon {
-  color: var(--text-dim);
-  text-decoration: none;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.card-link-icon:hover {
+  color: #38bdf8;
 }
 
 .card-footer .card-time,
 .card-footer span:last-child {
-  color: #ffffff !important;
-  font-weight: 700;
+  color: #64748b !important;
+  font-weight: 500;
   font-size: 11px;
   letter-spacing: 0.3px;
   white-space: nowrap;
   font-family: var(--font-mono, monospace);
-  font-variant-numeric: tabular-nums;
 }
+
+
 
 /* ─── 4. DERİN PİYASA DUYARLILIK MODALI (OK İLE AÇILAN PENCERE) ──── */
 #sentiment-modal-backdrop {

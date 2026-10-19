@@ -359,39 +359,46 @@ class BotManager {
     if (alert.type === 'm1a') {
       if (!m1aDropBot.canEmitSignal(sym, '1m', null, 45000)) return;
 
-      const prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.dropPct, sym);
-      const curPrice = formatCryptoPrice(alert.price, sym);
-
+      let curPrice = formatCryptoPrice(alert.price, sym);
+      let prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.dropPct, sym);
       let realRsi = null;
       let realStochK = null;
       let realStochD = null;
-      let volChangeNum = -Math.abs(alert.dropPct * 14 + (Math.random() * 8));
+      let volChangeNum = -Math.abs(alert.dropPct * 14);
+      let dropPct = alert.dropPct;
 
       try {
-        const klines1m = await marketDataEngine.getKlines(sym, '1m', 30);
-        if (klines1m && klines1m.length >= 15) {
-          const closes = klines1m.map(k => k.close);
-          closes[closes.length - 1] = alert.price;
+        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 16);
+        if (klines1m && klines1m.length >= 2) {
+          const curK = klines1m[klines1m.length - 1];
+          const prevK = klines1m[klines1m.length - 2];
+
+          // Previous Price = Güncel 1m mumunun açılış fiyatı (Visivero standardı)
+          if (curK.open > 0) {
+            prevPrice = formatCryptoPrice(curK.open, sym);
+            dropPct = ((alert.price - curK.open) / curK.open) * 100;
+          }
+
+          // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
+          if (prevK.volume > 0 && curK.volume >= 0) {
+            volChangeNum = (((curK.volume - prevK.volume) / prevK.volume) * 100);
+          }
+
+          const closes = klines1m.slice(0, -1).map(k => k.close).concat([alert.price]);
           const rsiRes = quantIndicators.calculateRSI(closes, 14);
           const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
           realRsi = Math.round(rsiRes.rsi);
           realStochK = Math.round(stochRes.k);
           realStochD = Math.round(stochRes.d);
-
-          const lastK = klines1m[klines1m.length - 1];
-          const prevK = klines1m[klines1m.length - 2];
-          if (prevK && prevK.quoteVolume > 0 && lastK) {
-            volChangeNum = (((lastK.quoteVolume - prevK.quoteVolume) / prevK.quoteVolume) * 100);
-          }
         }
       } catch (err) {}
 
-      // Fallback Wilder hesaplaması
+      // Fallback
       if (realRsi === null) {
-        realRsi = Math.max(8, Math.min(85, Math.round(50 + alert.dropPct * 18)));
+        realRsi = Math.max(8, Math.min(85, Math.round(50 + dropPct * 18)));
       }
       if (realStochK === null) {
-        realStochK = Math.max(5, Math.min(95, Math.round(50 + alert.dropPct * 22)));
+        realStochK = Math.max(5, Math.min(95, Math.round(50 + dropPct * 22)));
         realStochD = Math.max(5, Math.min(95, Math.round(realStochK + 4)));
       }
 
@@ -407,17 +414,17 @@ class BotManager {
         dateStr,
         type: 'drop',
         dot: '🔴',
-        dropValue: `${alert.dropPct.toFixed(2)}%`,
+        dropValue: `${dropPct.toFixed(2)}%`,
         currentPrice: curPrice,
         prevPrice,
         volume: volFormatted,
         rsi: rsiFormatted,
         stochastic: stochFormatted,
         btcStatus: 'Normal',
-        dateLabel: dateStr,
+        dateLabel: 'Bugün',
         time: nowTime
       });
-      console.log(`[QuantEngine Sinyal] M1-A Yerel Radar: ${sym} (${alert.dropPct.toFixed(2)}% | RSI: ${realRsi} | Stoch: ${realStochK}/${realStochD})`);
+      console.log(`[QuantEngine Sinyal] M1-A Yerel Radar: ${sym} (${dropPct.toFixed(2)}% | Vol: ${volFormatted} | RSI: ${realRsi} | Stoch: ${realStochK}/${realStochD})`);
       return;
     }
 
@@ -427,13 +434,41 @@ class BotManager {
     if (alert.type === 'm1premium') {
       if (!m1PremiumBot.canEmitSignal(sym, '1m', null, 45000)) return;
 
-      const prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.boostPct, sym);
-      const curPrice = formatCryptoPrice(alert.price, sym);
-      const volChangePct = alert.volChangePct !== undefined ? alert.volChangePct.toFixed(2) : '+6.80';
+      let curPrice = formatCryptoPrice(alert.price, sym);
+      let prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.boostPct, sym);
+      let estRsi = Math.max(25, Math.min(92, Math.round(50 + alert.boostPct * 12)));
+      let estStochK = Math.max(10, Math.min(98, Math.round(50 + alert.boostPct * 18)));
+      let estStochD = Math.max(10, Math.min(98, Math.round(estStochK - 5)));
+      let volChangeNum = alert.boostPct * 12;
+      let boostPct = alert.boostPct;
 
-      const estRsi = Math.max(25, Math.min(92, Math.round(50 + alert.boostPct * 12)));
-      const estStochK = Math.max(10, Math.min(98, Math.round(50 + alert.boostPct * 18)));
-      const estStochD = Math.max(10, Math.min(98, Math.round(estStochK - 5)));
+      try {
+        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 16);
+        if (klines1m && klines1m.length >= 2) {
+          const curK = klines1m[klines1m.length - 1];
+          const prevK = klines1m[klines1m.length - 2];
+
+          // Previous Price = Güncel 1m mumunun açılış fiyatı (Visivero standardı)
+          if (curK.open > 0) {
+            prevPrice = formatCryptoPrice(curK.open, sym);
+            boostPct = ((alert.price - curK.open) / curK.open) * 100;
+          }
+
+          // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
+          if (prevK.volume > 0 && curK.volume >= 0) {
+            volChangeNum = (((curK.volume - prevK.volume) / prevK.volume) * 100);
+          }
+
+          const closes = klines1m.slice(0, -1).map(k => k.close).concat([alert.price]);
+          const rsiRes = quantIndicators.calculateRSI(closes, 14);
+          const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
+          estRsi = Math.round(rsiRes.rsi);
+          estStochK = Math.round(stochRes.k);
+          estStochD = Math.round(stochRes.d);
+        }
+      } catch (err) {}
+
+      const volFormatted = `${volChangeNum >= 0 ? '+' : ''}${volChangeNum.toFixed(2)}%`;
 
       m1PremiumBot.addSignal({
         id: `m1p_${sym}_${now}`,
@@ -442,8 +477,8 @@ class BotManager {
         isoDate: dateObj.toISOString(),
         dateStr,
         dot: '🟢',
-        stars: alert.boostPct >= 1.50 ? '⭐️' : '',
-        boostValue: `+${alert.boostPct.toFixed(2)}%`,
+        stars: boostPct >= 1.50 ? '⭐️' : '',
+        boostValue: `+${boostPct.toFixed(2)}%`,
         currentPrice: curPrice,
         prevPrice,
         rsi: {
@@ -456,9 +491,9 @@ class BotManager {
           m5: `${estStochD}`,
           h1: '35'
         },
-        divergence: alert.boostPct >= 1.20 ? '1m ✅' : undefined,
-        isFavorite: alert.boostPct >= 1.50,
-        dateLabel: dateStr,
+        divergence: boostPct >= 1.20 ? '1m ✅' : undefined,
+        isFavorite: boostPct >= 1.50,
+        dateLabel: 'Bugün',
         time: nowTime
       });
 
@@ -471,18 +506,18 @@ class BotManager {
         dateStr,
         type: 'boost',
         dot: '🟢',
-        boostValue: `+${alert.boostPct.toFixed(2)}%`,
+        boostValue: `+${boostPct.toFixed(2)}%`,
         currentPrice: curPrice,
         prevPrice,
-        volume: `+${volChangePct}%`,
+        volume: volFormatted,
         rsi: `${estRsi}${estRsi >= 70 ? ' ⚠️' : ''}`,
         stochastic: `${estStochK}/${estStochD}${estStochK >= 80 ? ' ⚠️' : ''}`,
         btcStatus: 'Normal',
-        dateLabel: dateStr,
+        dateLabel: 'Bugün',
         time: nowTime
       });
 
-      console.log(`[QuantEngine Sinyal] M1-Premium & M1-A Boost: ${sym} (+${alert.boostPct.toFixed(2)}%)`);
+      console.log(`[QuantEngine Sinyal] M1-Premium & M1-A Boost: ${sym} (+${boostPct.toFixed(2)}% | Vol: ${volFormatted})`);
       return;
     }
 
