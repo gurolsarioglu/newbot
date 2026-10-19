@@ -413,6 +413,8 @@ class BotManager {
         console.warn(`[M1] ${sym}: gerçek metrikler alınamadı, sinyal atlandı (tahmini değer üretilmez).`);
         return;
       }
+      // Gösterilen yüzde (önceki kapanışa göre) eşiğin altındaysa sinyal değildir
+      if (Math.abs(m.pct) < 0.70) return;
 
       const curPrice = formatCryptoPrice(alert.price, sym);
       const prevPrice = formatCryptoPrice(m.prevClose, sym);
