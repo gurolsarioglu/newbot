@@ -881,3 +881,17 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 3. **Canlı Sinyal Üretimi Doğrulandı (Saat 21:32 - 21:33):**
    - M1-Premium: PLAYUSDT (+1.61%), BTWUSDT (+0.75%), CAPUSDT (+0.78%)
    - M1-A: CTRUSDT (-0.87%), SQQQUSDT (-1.96%), TAGUSDT (-2.06%)
+
+## 🔍 4. Kullanıcı Canlı Ekran Görüntüsü Karşılaştırması & M1-A Çift Yönlü Akış Düzeltmesi (21:44)
+1. **Kullanıcı Geri Bildirimi:**
+   - 1. Ekran (Visivero): Saat 21:44'te `🟢 #LYNUSDT Boost Value: +1.47%`, RSI: 79 ⚠️, Stoch: 94/93 ⚠️.
+   - 2. Ekran (Bizim Terminal): Saat 21:44'te `🔴 #PHAUSDT Drop Value: -0.75%` ve `🔴 #SOPHUSDT Drop Value: -3.84%`.
+2. **Kök Neden Tespiti:**
+   - Visivero'nun M1-A botu hem mikro düşüşleri (`🔴 Drop Value`), hem mikro sıçramaları (`🟢 Boost Value`) tek bir kanalda birleştirerek yayınlamaktadır.
+   - Bizim yerel radarımız saat 21:44'te `LYNUSDT` sıçramasını `%1.47` olarak **birebir aynı saniyede ve virgülden sonra yüzde 100 aynı hassasiyetle** yakalamıştı; ancak bu sıçrama yönlendiricide yalnızca `M1-Premium` botuna iletilmiş, `M1-A` botuna sadece düşüşler aktarılmıştı.
+3. **Uygulanan Düzeltmeler:**
+   - `terminal/bots/index.js`: Radar 1m sıçrama sinyalleri hem `m1PremiumBot`'a hem de `m1aDropBot`'a yönlendirildi.
+   - `terminal/bots/strategies/m1a-drop.bot.js`: Kart yapısı hem `dropValue` hem `boostValue` taşıyacak şekilde güncellendi, `dateLabel` "Bugün" olarak ayarlandı.
+   - `terminal/public/plugins/bot-hub/bot-renderer.js`: M1-A kart oluşturucusu `isDrop` kontrolüyle `🟢 Boost Value` ve `🔴 Drop Value` etiketlerini, dinamik renkleri ve Visivero tarzı cyan `#38bdf8` `#SYMBOL` etiketini destekleyecek şekilde güncellendi.
+   - `terminal/public/styles/terminal-pro.css`: Ortalanmış gri kapsül tarih ayracı (`.signal-date-divider span { background: #232733; padding: 3px 18px; border-radius: 999px; }`) eklenerek Visivero'nun "Bugün" rozetiyle birebir görsel uyum sağlandı.
+4. **Git Takibi:** Tüm değişiklikler commit edilerek takip altına alındı.

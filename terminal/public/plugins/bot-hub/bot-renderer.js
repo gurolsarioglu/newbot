@@ -327,18 +327,30 @@ const BotRenderer = (() => {
 
   function getSignalDateLabel(s) {
     if (!s) return '';
-    if (s.dateStr && /^\d{2}\.\d{2}\.\d{4}$/.test(s.dateStr)) return s.dateStr;
+    const now = new Date();
+    const todayStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    if (s.dateLabel) {
+      const lbl = String(s.dateLabel).toLowerCase();
+      if (lbl === 'today' || lbl === 'bugün') return 'Bugün';
+    }
+    if (s.dateStr) {
+      if (s.dateStr === todayStr || s.dateStr.toLowerCase() === 'today' || s.dateStr.toLowerCase() === 'bugün') {
+        return 'Bugün';
+      }
+      if (/^\d{2}\.\d{2}\.\d{4}$/.test(s.dateStr)) return s.dateStr;
+    }
     if (s.timestamp) {
       const d = new Date(Number(s.timestamp));
       if (!isNaN(d.getTime())) {
         const dd = String(d.getDate()).padStart(2, '0');
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const yyyy = d.getFullYear();
-        return `${dd}.${mm}.${yyyy}`;
+        const dStr = `${dd}.${mm}.${yyyy}`;
+        if (dStr === todayStr) return 'Bugün';
+        return dStr;
       }
     }
-    if (s.dateLabel) return s.dateLabel;
-    return '';
+    return 'Bugün';
   }
 
   /**
@@ -729,10 +741,11 @@ const BotRenderer = (() => {
           lastDate = dateTag;
           html += `<div class="signal-date-divider"><span>${lastDate}</span></div>`;
         }
-        const isDrop = (s.type === 'drop') || (s.dropValue && s.dropValue.startsWith('-'));
-        const dot = isDrop ? '🔴' : '🟢';
+        const isDrop = (s.type === 'drop') || (s.dropValue && String(s.dropValue).startsWith('-'));
+        const dot = s.dot || (isDrop ? '🔴' : '🟢');
         const valColor = isDrop ? 'var(--red)' : 'var(--green)';
         const label = isDrop ? 'Drop Value:' : 'Boost Value:';
+        const valText = isDrop ? (s.dropValue || s.boostValue || '0.00%') : (s.boostValue || s.dropValue || '0.00%');
 
         const rsiDisplay = formatRsiWithAlert(s.rsi);
         const stochDisplay = formatStochWithAlert(s.stochastic);
@@ -741,13 +754,13 @@ const BotRenderer = (() => {
         html += `
           <div class="signal-card" data-symbol="${s.symbol}">
             <div class="card-top-row">
-              <span class="card-symbol" style="color: ${isDrop ? '#f87171' : '#38bdf8'}; font-weight: 700;">
+              <span class="card-symbol" style="color: #38bdf8; font-weight: 700;">
                 ${dot} <span class="card-coin-tag" data-coin="${s.symbol}" title="Son 60 günlük sinyal geçmişini aç">#${s.symbol}</span>
               </span>
             </div>
             <div class="card-field-row">
               <span>${label}</span>
-              <span style="color: ${valColor}; font-weight: 700;">${s.dropValue}</span>
+              <span style="color: ${valColor}; font-weight: 700;">${valText}</span>
             </div>
             <div class="card-field-row">
               <span>Current Price:</span>

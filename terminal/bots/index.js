@@ -461,7 +461,28 @@ class BotManager {
         dateLabel: dateStr,
         time: nowTime
       });
-      console.log(`[QuantEngine Sinyal] M1-Premium Yerel Radar: ${sym} (+${alert.boostPct.toFixed(2)}%)`);
+
+      // Visivero M1-A hem Drop (🔴) hem Boost (🟢) sinyallerini barındırır
+      m1aDropBot.addSignal({
+        id: `m1a_${sym}_${now}`,
+        symbol: sym,
+        timestamp: now,
+        isoDate: dateObj.toISOString(),
+        dateStr,
+        type: 'boost',
+        dot: '🟢',
+        boostValue: `+${alert.boostPct.toFixed(2)}%`,
+        currentPrice: curPrice,
+        prevPrice,
+        volume: `+${volChangePct}%`,
+        rsi: `${estRsi}${estRsi >= 70 ? ' ⚠️' : ''}`,
+        stochastic: `${estStochK}/${estStochD}${estStochK >= 80 ? ' ⚠️' : ''}`,
+        btcStatus: 'Normal',
+        dateLabel: dateStr,
+        time: nowTime
+      });
+
+      console.log(`[QuantEngine Sinyal] M1-Premium & M1-A Boost: ${sym} (+${alert.boostPct.toFixed(2)}%)`);
       return;
     }
 

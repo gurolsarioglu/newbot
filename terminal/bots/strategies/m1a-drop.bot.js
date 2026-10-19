@@ -146,14 +146,15 @@ class M1ADropBot extends BaseBot {
       symbol: symbol,
       type: type,
       dot: dot,
-      dropValue: valFormatted,
+      dropValue: type === 'drop' ? valFormatted : null,
+      boostValue: type === 'boost' ? valFormatted : null,
       currentPrice: formatCryptoPrice(s.price),
       prevPrice: prevPriceStr,
       volume: volFormatted,
       rsi: rsiFormatted,
       stochastic: stochFormatted,
       btcStatus: s.btcStatus || 'Normal',
-      dateLabel: 'Today',
+      dateLabel: 'Bugün',
       time: nowTime
     };
 
