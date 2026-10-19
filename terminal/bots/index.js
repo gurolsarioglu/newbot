@@ -238,7 +238,7 @@ class BotManager {
     // 3. Başlangıç Taraması (3 saniye sonra Binance verileriyle yerel sinyalleri üret)
     setTimeout(() => {
       this._scanFundingRates().catch(() => {});
-      this._seedLocalM1Signals();
+      // NOT: _seedLocalM1Signals() kaldırıldı — Math.random() ile sahte düşüş/hacim/RSI üretiyordu.
       this._scanStructuralSetups().catch(e => {
         console.warn('[BotManager Init Scan Error]:', e.message);
       });
@@ -346,6 +346,52 @@ class BotManager {
     console.log(`[BotManager] ✅ Binance REST 24h Ticker'larından M1-A (${topDecliners.length}) ve M1-P (${topGainers.length}) baslangic sinyalleri yerel olarak uretildi.`);
   }
 
+  /**
+   * M1 sinyal metrikleri (Visivero birebir):
+   *  - prevClose  = bir önceki KAPANMIŞ 1m mumunun kapanışı (openTime ile eşleştirilir, dizi indeksi ile değil)
+   *  - pct        = (anlık fiyat - prevClose) / prevClose * 100  (yuvarlama yok)
+   *  - volDelta   = (canlı mum USDT hacmi - önceki mum USDT hacmi) / önceki mum hacmi * 100
+   *                 canlı mum hacmi sinyal ANINDA WS'ten (quoteVol - dakika başı quoteVol) alınır;
+   *                 REST gecikmesi hacmi şişirdiği için REST'teki canlı mum yalnızca yedektir.
+   *  - closes     = RSI/StochRSI için kapanmış mumlar + anlık fiyat
+   */
+  async _computeM1Metrics(alert) {
+    const klines = await marketDataEngine.getFreshKlines(alert.symbol, '1m', 100);
+    if (!klines || klines.length < 20) return null;
+
+    const minute = alert.candleMinute || Math.floor(alert.timestamp / 60000);
+    const curOpen = minute * 60000;
+    const prevOpen = curOpen - 60000;
+
+    const prevK = klines.find(k => k.openTime === prevOpen);
+    if (!prevK || !(prevK.close > 0)) return null;
+    const curK = klines.find(k => k.openTime === curOpen) || null;
+
+    const pct = ((alert.price - prevK.close) / prevK.close) * 100;
+
+    let curVol = alert.candleQuoteVol;
+    if (curVol === null || curVol === undefined) {
+      curVol = curK ? curK.quoteVolume : null;
+    }
+    let volDelta = null;
+    if (curVol !== null && prevK.quoteVolume > 0) {
+      volDelta = ((curVol - prevK.quoteVolume) / prevK.quoteVolume) * 100;
+    }
+
+    const closes = klines.filter(k => k.openTime < curOpen).map(k => k.close).concat([alert.price]);
+    const rsiRes = quantIndicators.calculateRSI(closes, 14);
+    const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
+
+    return {
+      prevClose: prevK.close,
+      pct,
+      volDelta,
+      rsi: Math.round(rsiRes.rsi),
+      stochK: Math.round(stochRes.k),
+      stochD: Math.round(stochRes.d)
+    };
+  }
+
   async _handleRadarAlert(alert) {
     const sym = alert.symbol;
     const now = Date.now();
@@ -354,57 +400,48 @@ class BotManager {
     const nowTime = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
     // ─────────────────────────────────────────────────────────────
-    // A. M1-A Botu: 1m Ani Düşüş (<= -0.70%) — SIFIR-REST HAFIZA İÇİ RADAR
+    // A+B. M1-A (Drop/Boost) ve M1-Premium — gerçek Binance verisi, tahmin/fallback YOK
     // ─────────────────────────────────────────────────────────────
-    if (alert.type === 'm1a') {
-      if (!m1aDropBot.canEmitSignal(sym, '1m', null, 45000)) return;
+    if (alert.type === 'm1a' || alert.type === 'm1premium') {
+      const isDropAlert = alert.type === 'm1a';
+      const gateBot = isDropAlert ? m1aDropBot : m1PremiumBot;
+      if (!gateBot.canEmitSignal(sym, '1m', null, 45000)) return;
 
-      let curPrice = formatCryptoPrice(alert.price, sym);
-      let prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.dropPct, sym);
-      let realRsi = null;
-      let realStochK = null;
-      let realStochD = null;
-      let volChangeNum = -Math.abs(alert.dropPct * 14);
-      let dropPct = alert.dropPct;
-
-      try {
-        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 100);
-        if (klines1m && klines1m.length >= 2) {
-          const curK = klines1m[klines1m.length - 1];
-          const prevK = klines1m[klines1m.length - 2];
-
-          // Previous Price = Önceki 1m mumunun kapanış fiyatı (Visivero kesin standardı)
-          if (prevK && prevK.close > 0) {
-            prevPrice = formatCryptoPrice(prevK.close, sym);
-            dropPct = ((alert.price - prevK.close) / prevK.close) * 100;
-          }
-
-          // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
-          if (prevK.volume > 0 && curK.volume >= 0) {
-            volChangeNum = (((curK.volume - prevK.volume) / prevK.volume) * 100);
-          }
-
-          const closes = klines1m.slice(0, -1).map(k => k.close).concat([alert.price]);
-          const rsiRes = quantIndicators.calculateRSI(closes, 14);
-          const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
-          realRsi = Math.round(rsiRes.rsi);
-          realStochK = Math.round(stochRes.k);
-          realStochD = Math.round(stochRes.d);
-        }
-      } catch (err) {}
-
-      // Fallback
-      if (realRsi === null) {
-        realRsi = Math.max(8, Math.min(85, Math.round(50 + dropPct * 18)));
-      }
-      if (realStochK === null) {
-        realStochK = Math.max(5, Math.min(95, Math.round(50 + dropPct * 22)));
-        realStochD = Math.max(5, Math.min(95, Math.round(realStochK + 4)));
+      let m;
+      try { m = await this._computeM1Metrics(alert); } catch (e) { m = null; }
+      if (!m || m.volDelta === null) {
+        console.warn(`[M1] ${sym}: gerçek metrikler alınamadı, sinyal atlandı (tahmini değer üretilmez).`);
+        return;
       }
 
-      const rsiFormatted = `${realRsi}${realRsi <= 30 || realRsi >= 70 ? ' ⚠️' : ''}`;
-      const stochFormatted = `${realStochK}/${realStochD}${realStochK <= 20 || realStochK >= 80 ? ' ⚠️' : ''}`;
-      const volFormatted = `${volChangeNum.toFixed(2)}%`;
+      const curPrice = formatCryptoPrice(alert.price, sym);
+      const prevPrice = formatCryptoPrice(m.prevClose, sym);
+      const isDrop = m.pct < 0;
+      const pctStr = `${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}%`;
+      const volFormatted = `${m.volDelta.toFixed(2)}%`;
+      const rsiFormatted = `${m.rsi}${m.rsi <= 30 || m.rsi >= 70 ? ' ⚠️' : ''}`;
+      const stochFormatted = `${m.stochK}/${m.stochD}${m.stochK <= 20 || m.stochK >= 80 ? ' ⚠️' : ''}`;
+
+      if (!isDrop && m1PremiumBot.canEmitSignal(sym, '1m', null, 45000)) {
+        m1PremiumBot.addSignal({
+          id: `m1p_${sym}_${now}`,
+          symbol: sym,
+          timestamp: now,
+          isoDate: dateObj.toISOString(),
+          dateStr,
+          dot: '🟢',
+          stars: m.pct >= 1.50 ? '⭐️' : '',
+          boostValue: pctStr,
+          currentPrice: curPrice,
+          prevPrice,
+          rsi: { m1: `${m.rsi} ❗`, m5: '55', h1: '48' },
+          srsi: { m1: `${m.stochK} ❗`, m5: `${m.stochD}`, h1: '35' },
+          divergence: m.pct >= 1.20 ? '1m ✅' : undefined,
+          isFavorite: m.pct >= 1.50,
+          dateLabel: 'Bugün',
+          time: nowTime
+        });
+      }
 
       m1aDropBot.addSignal({
         id: `m1a_${sym}_${now}`,
@@ -412,9 +449,9 @@ class BotManager {
         timestamp: now,
         isoDate: dateObj.toISOString(),
         dateStr,
-        type: 'drop',
-        dot: '🔴',
-        dropValue: `${dropPct.toFixed(2)}%`,
+        type: isDrop ? 'drop' : 'boost',
+        dot: isDrop ? '🔴' : '🟢',
+        ...(isDrop ? { dropValue: pctStr } : { boostValue: pctStr }),
         currentPrice: curPrice,
         prevPrice,
         volume: volFormatted,
@@ -424,100 +461,8 @@ class BotManager {
         dateLabel: 'Bugün',
         time: nowTime
       });
-      console.log(`[QuantEngine Sinyal] M1-A Yerel Radar: ${sym} (${dropPct.toFixed(2)}% | Vol: ${volFormatted} | RSI: ${realRsi} | Stoch: ${realStochK}/${realStochD})`);
-      return;
-    }
 
-    // ─────────────────────────────────────────────────────────────
-    // B. M1 Premium Botu: 1m Sıçrama (>= +0.70%) — SIFIR-REST HAFIZA İÇİ RADAR
-    // ─────────────────────────────────────────────────────────────
-    if (alert.type === 'm1premium') {
-      if (!m1PremiumBot.canEmitSignal(sym, '1m', null, 45000)) return;
-
-      let curPrice = formatCryptoPrice(alert.price, sym);
-      let prevPrice = alert.prevPrice ? formatCryptoPrice(alert.prevPrice, sym) : computePrevPrice(alert.price, alert.boostPct, sym);
-      let estRsi = Math.max(25, Math.min(92, Math.round(50 + alert.boostPct * 12)));
-      let estStochK = Math.max(10, Math.min(98, Math.round(50 + alert.boostPct * 18)));
-      let estStochD = Math.max(10, Math.min(98, Math.round(estStochK - 5)));
-      let volChangeNum = alert.boostPct * 12;
-      let boostPct = alert.boostPct;
-
-      try {
-        const klines1m = await marketDataEngine.getFreshKlines(sym, '1m', 100);
-        if (klines1m && klines1m.length >= 2) {
-          const curK = klines1m[klines1m.length - 1];
-          const prevK = klines1m[klines1m.length - 2];
-
-          // Previous Price = Önceki 1m mumunun kapanış fiyatı (Visivero kesin standardı)
-          if (prevK && prevK.close > 0) {
-            prevPrice = formatCryptoPrice(prevK.close, sym);
-            boostPct = ((alert.price - prevK.close) / prevK.close) * 100;
-          }
-
-          // Volume Delta = ((Canlı 1m Mum Hacmi - Önceki Kapanan 1m Mum Hacmi) / Önceki Hacim) * 100
-          if (prevK.volume > 0 && curK.volume >= 0) {
-            volChangeNum = (((curK.volume - prevK.volume) / prevK.volume) * 100);
-          }
-
-          const closes = klines1m.slice(0, -1).map(k => k.close).concat([alert.price]);
-          const rsiRes = quantIndicators.calculateRSI(closes, 14);
-          const stochRes = quantIndicators.calculateStochRSI(rsiRes.rsiSeries, 14, 3, 3);
-          estRsi = Math.round(rsiRes.rsi);
-          estStochK = Math.round(stochRes.k);
-          estStochD = Math.round(stochRes.d);
-        }
-      } catch (err) {}
-
-      const volFormatted = `${volChangeNum.toFixed(2)}%`;
-
-      m1PremiumBot.addSignal({
-        id: `m1p_${sym}_${now}`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        dot: '🟢',
-        stars: boostPct >= 1.50 ? '⭐️' : '',
-        boostValue: `+${boostPct.toFixed(2)}%`,
-        currentPrice: curPrice,
-        prevPrice,
-        rsi: {
-          m1: `${estRsi} ❗`,
-          m5: '55',
-          h1: '48'
-        },
-        srsi: {
-          m1: `${estStochK} ❗`,
-          m5: `${estStochD}`,
-          h1: '35'
-        },
-        divergence: boostPct >= 1.20 ? '1m ✅' : undefined,
-        isFavorite: boostPct >= 1.50,
-        dateLabel: 'Bugün',
-        time: nowTime
-      });
-
-      // Visivero M1-A hem Drop (🔴) hem Boost (🟢) sinyallerini barındırır
-      m1aDropBot.addSignal({
-        id: `m1a_${sym}_${now}`,
-        symbol: sym,
-        timestamp: now,
-        isoDate: dateObj.toISOString(),
-        dateStr,
-        type: 'boost',
-        dot: '🟢',
-        boostValue: `+${boostPct.toFixed(2)}%`,
-        currentPrice: curPrice,
-        prevPrice,
-        volume: volFormatted,
-        rsi: `${estRsi}${estRsi >= 70 ? ' ⚠️' : ''}`,
-        stochastic: `${estStochK}/${estStochD}${estStochK >= 80 ? ' ⚠️' : ''}`,
-        btcStatus: 'Normal',
-        dateLabel: 'Bugün',
-        time: nowTime
-      });
-
-      console.log(`[QuantEngine Sinyal] M1-Premium & M1-A Boost: ${sym} (+${boostPct.toFixed(2)}% | Vol: ${volFormatted})`);
+      console.log(`[QuantEngine Sinyal] M1 ${isDrop ? 'Drop' : 'Boost'}: ${sym} (${pctStr} | Vol: ${volFormatted} | RSI: ${m.rsi} | Stoch: ${m.stochK}/${m.stochD})`);
       return;
     }
 

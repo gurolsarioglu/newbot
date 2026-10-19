@@ -327,14 +327,18 @@ class MarketDataEngine extends EventEmitter {
       }
 
       // 1 Dakikalık Mum Referans Takipçisi (Önceki 1m mum kapanışı bazlı - Visivero standardı)
+      // startVol: dakikanın ilk tick'indeki 24s kümülatif USDT hacmi -> canlı mum hacmi = quoteVol - startVol
       const curMinute = Math.floor(now / 60000);
       let m1State = this.m1MinuteMap.get(sym);
       if (!m1State || m1State.minute !== curMinute) {
+        const hadPrev = !!m1State;
         const refPrice = m1State ? m1State.lastPrice : curPrice;
         m1State = {
           minute: curMinute,
           refPrice: refPrice,
-          lastPrice: curPrice
+          lastPrice: curPrice,
+          startVol: quoteVol,
+          volValid: hadPrev // ilk dakika (sunucu yeni açıldı) güvenilir değil
         };
         this.m1MinuteMap.set(sym, m1State);
       } else {
@@ -342,6 +346,7 @@ class MarketDataEngine extends EventEmitter {
       }
 
       const candle1mChangePct = m1State.refPrice > 0 ? ((curPrice - m1State.refPrice) / m1State.refPrice) * 100 : 0;
+      const candleQuoteVol = m1State.volValid ? Math.max(0, quoteVol - m1State.startVol) : null;
 
       // 1 Dakikalık değişim analizi (Aşama 1 Radarı)
       if (sw.length >= 2) {
@@ -370,6 +375,8 @@ class MarketDataEngine extends EventEmitter {
               dropPct: effChgPct,
               volUsd: quoteVol,
               volChangePct,
+              candleQuoteVol,
+              candleMinute: curMinute,
               timestamp: now
             });
           } else if (effChgPct >= 0.70) {
@@ -382,6 +389,8 @@ class MarketDataEngine extends EventEmitter {
               boostPct: effChgPct,
               volUsd: quoteVol,
               volChangePct,
+              candleQuoteVol,
+              candleMinute: curMinute,
               timestamp: now
             });
           }
