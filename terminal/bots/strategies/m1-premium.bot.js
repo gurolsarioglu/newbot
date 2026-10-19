@@ -114,6 +114,8 @@ class M1PremiumBot extends BaseBot {
     const card = {
       id: 'm1p_' + Date.now(),
       symbol: symbol,
+      dot: s.dot || '🟢',
+      stars: analysis.isFavorite ? '⭐️' : '',
       isFavorite: analysis.isFavorite,
       boostValue: boostFormatted,
       currentPrice: formatCryptoPrice(s.price),

@@ -855,5 +855,29 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 - **Arayüz Doğrulaması:**
   - `http://localhost:3000` kokpitinde 9 botun tümünde **20:10 - 20:11** güncel yerel zaman damgası ve doğrudan Binance akışıyla sinyal üretimi teyit edildi.
 
+---
 
+# 📅 19.10.2026 — REA MCP Kurulumu, Canlı Visivero Tersine Mühendislik Analizi & Canlı Bot Doğrulama Testi
 
+## 💬 1. Konuşmalarımız ve Kararlar
+1. **REA (Reverse Engineer Anything) MCP Kurulumu:**
+   - Kullanıcı: *"https://github.com/morluto/rea.git bu repo mcp olarak kur projemizde kullanacağız"* talimatını verdi.
+   - `rea-agents@6.7.0` kuruldu, `~/.gemini/config/mcp_config.json` ve `.agents/plugins/rea/mcp_config.json` yapılandırılarak reverse-engineer-anything becerisi (207 araç) sisteme entegre edildi.
+2. **Visivero Analizi ve Formüllerinin Çıkarılması:**
+   - Kullanıcı: *"hepsini sırası ile yapıyor olacağız... kesinlikle visivero terminalini kullanmıyorsun biz bağımsız olacağız amacımız buradaki kıymetli olan formülleri öğrenmek ve aynı sinyalleri oluşturabiliyor olmak."*
+   - Kullanıcı ayrıca TradingView üzerindeki ücretli Buy-Sell, S/R ve 5in1 indikatörlerini sonraki aşamada Pine Script v5 olarak geliştireceğimizi belirtti.
+
+## 🧠 2. Tersine Mühendislik ve Formül Bulguları
+1. **Orijinal İndikatör Şablonları Deşifre Edildi:**
+   - `/api/script-runtime/templates` uç noktasından 10 indikatör şablonunun Python kodları çıkarıldı (WaveTrend, Range Filter, Reversal Bands, Pivot SR, 5in1).
+2. **8 Futures Botunun Formülleri Kesinleştirildi:**
+   - M1-A (Drop/Boost + Vol Delta + Stoch K/D), M1-Premium (Multi-timeframe RSI/SRSI + Star), Hammer-Pro (#W1-W3 WaveTrend + Pivot mesafesi), Hammer-Pro+ (Reversal Bands SMA20 ± 3xATR), 4S (H4 RSI + Balina L/S oranları), V3 (Hacim Sıçraması), Div (30 mumluk Pivot Divergence), FR (Negatif Fonlama).
+
+## 🛠️ 3. Teknik Geliştirmeler ve Canlı Doğrulama
+1. **M1-Premium Kart Standartlaştırması:**
+   - `m1-premium.bot.js` ve `bots/index.js` içinde dot ve stars rozet atamaları tamamlandı.
+2. **Yerel Sunucunun Başlatılması:**
+   - Terminal sunucusu (`terminal-server.js`) doğrudan Binance Futures canlı akışıyla başlatıldı.
+3. **Canlı Sinyal Üretimi Doğrulandı (Saat 21:32 - 21:33):**
+   - M1-Premium: PLAYUSDT (+1.61%), BTWUSDT (+0.75%), CAPUSDT (+0.78%)
+   - M1-A: CTRUSDT (-0.87%), SQQQUSDT (-1.96%), TAGUSDT (-2.06%)
