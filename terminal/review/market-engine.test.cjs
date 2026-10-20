@@ -228,3 +228,24 @@ test('745-symbol radar load remains bounded and does not synthesize signals', ()
   assert.equal(e.tickerMap.size, 745); assert.equal(e.subscriptions.size, 745); assert.equal(alerts, 0);
   assert.ok(performance.now() - start < 2000);
 });
+test('kline socket subscriptions respect Binance 180-stream group and 40-stream payload limits', () => {
+  const sentPayloads = [];
+  class RecordingSocket extends FakeSocket {
+    constructor(url) { super(url); this.readyState = FakeSocket.OPEN; }
+    send(msg) { super.send(msg); sentPayloads.push(JSON.parse(msg)); }
+  }
+  const timers = [];
+  const e = load('services/market-data-engine.service.js', { ws: RecordingSocket }, {
+    Date: ReplayDate,
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout() {}
+  });
+  e.isRunning = true;
+  for (let i = 0; i < 420; i++) e._subscribeKline(`SYM${i}USDT`, '1m');
+  while (timers.length) timers.shift()();
+  assert.equal(e.klineSockets.length, 3);
+  assert.ok(e.klineSockets.every(g => g.streams.size <= 180));
+  assert.ok(sentPayloads.length >= 11);
+  assert.ok(sentPayloads.every(p => p.method === 'SUBSCRIBE' && p.params.length <= 40));
+  e.stop();
+});

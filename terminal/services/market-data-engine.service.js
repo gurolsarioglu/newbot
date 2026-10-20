@@ -140,7 +140,7 @@ class MarketDataEngine extends EventEmitter {
     if (this.isRunning) this._assignStream(stream);
   }
   _assignStream(stream) {
-    let group = this.klineSockets.find(g => g.streams.size < 800);
+    let group = this.klineSockets.find(g => g.streams.size < 180);
     if (!group) { group = { streams: new Set(), ws: null, flushTimer: null }; this.klineSockets.push(group); this._connectKlineSocket(group); }
     group.streams.add(stream);
     this._flushSubscriptions(group);
@@ -160,15 +160,20 @@ class MarketDataEngine extends EventEmitter {
       catch (err) { console.warn('[MarketData] Kline:', err.message); }
     });
     ws.on('error', err => console.warn('[MarketData] Kline WS:', err.message));
-    ws.on('close', () => { if (generation === this.generation) this._reconnect(() => this._connectKlineSocket(group)); });
+    ws.on('close', () => { clearTimeout(group.flushTimer); group.flushTimer = null; if (generation === this.generation) this._reconnect(() => this._connectKlineSocket(group)); });
   }
   _flushSubscriptions(group) {
     if (group.flushTimer || group.ws?.readyState !== WebSocket.OPEN) return;
     group.flushTimer = setTimeout(() => {
       group.flushTimer = null;
       if (!this.isRunning || group.ws?.readyState !== WebSocket.OPEN) return;
-      const streams = [...group.streams].filter(s => !group.sent.has(s));
-      if (streams.length) { group.ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: streams, id: Date.now() })); streams.forEach(s => group.sent.add(s)); }
+      const pending = [...group.streams].filter(s => !group.sent.has(s));
+      const batch = pending.slice(0, 40);
+      if (batch.length) {
+        group.ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: batch, id: Date.now() }));
+        batch.forEach(s => group.sent.add(s));
+      }
+      if (pending.length > batch.length) this._flushSubscriptions(group);
     }, 250);
   }
   _handleKline(event) {

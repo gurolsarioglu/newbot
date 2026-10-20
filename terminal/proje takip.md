@@ -999,3 +999,35 @@ Visivero ağı, WebSocket akışları ve Next.js derleme paketleri taranarak sis
 - **Yapılan İşlem:** GitHub üzerinde `gurolsarioglu/newbot` resmi reposu bağlandı, `origin master` dalı senkronize edildi.
 - **Doğrulama:** Git commit ve push işlemleri doğrulanarak projenin en son hali GitHub'da güvenceye alındı.
 
+---
+
+# 📅 20.10.2026 — Canlı Sunucu Başlatma, Binance WebSocket `1008 Payload too long` Abonelik Paketleme Düzeltmesi ve Canlı Sinyal Doğrulaması
+
+## 💬 Konuşmalarımız ve Onaylananlar
+- Kullanıcı projenin son halinin GitHub'dan indirilip nerede kaldığımızın kontrol edilmesini ve ardından sistemin başlatılarak canlı olarak görülmesini istedi.
+- Yerel depo (`origin/master`) kontrol edildi ve `http://localhost:3000` üzerinde sunucu başlatılarak tarayıcıda açıldı.
+
+## 🧠 Düşündüklerimiz ve Tespit Edilen Canlı Soket Sınırı
+- Canlı sunucu başlatıldığında `primeTickersFromRest()` ile günlük hacmi $\ge 1\text{M USDT}$ olan **568 vadeli parite** için `kline_1m` aboneliği başlatılıyordu.
+- Ancak `services/market-data-engine.service.js` içerisinde soket grup limiti `800` olarak ayarlandığından ve tüm bekleyen abonelikler tek bir `SUBSCRIBE` JSON mesajında gönderildiğinden, Binance WebSocket sunucusu (`wss://fstream.binance.com/market/stream`) bağlantıyı **`1008 Payload too long`** koduyla kapatıyordu.
+- Tek sembollü smoke testte (`BTCUSDT`) bu sınır aşılmadığı için sorun yalnızca tam piyasa (568+ sembol) canlı başlatıldığında ortaya çıkıyordu.
+
+## 🛠️ Yaptıklarımız
+- [`services/market-data-engine.service.js`](services/market-data-engine.service.js):
+  - Soket başına maksimum akış sayısı Binance resmi 200 stream limitinin güvenli altında olacak şekilde **`180`** (`g.streams.size < 180`) olarak sınırlandırıldı.
+  - `_flushSubscriptions` metodu tek seferde en fazla **`40` stream** (`pending.slice(0, 40)`) gönderecek ve kalanları 250ms aralıklarla paketleyecek şekilde güncellendi; ayrıca soket kapanışında bekleyen zamanlayıcı temizlendi.
+- [`review/market-engine.test.cjs`](review/market-engine.test.cjs):
+  - 420 sembollük abonelik yükünde soketlerin $\le 180$ akışa bölündüğünü ve her `SUBSCRIBE` mesajının $\le 40$ parametre içerdiğini doğrulayan birim testi eklendi.
+
+## ✅ Tamamlanan İşler ve Doğrulama
+- **Test Süiti (`npm test`):** **118/118 kontrol başarılı** (25 market engine testi dahil).
+- **Canlı Sunucu & Bot Sinyal Akışı (`http://localhost:3000`):**
+  - Sunucu arka planda aktif çalışıyor; 568 sembolün `kline_1m` akışları sıfır kopma ile bağlı.
+  - Saat `21:51` - `21:52` itibarıyla canlı üretilen sinyaller doğrulandı:
+    - **M1-A:** `GRVTUSDT (+0.74%, Vol: 299.12%, RSI: 70 ⚠️, Stoch: 100/99 ⚠️)`, `SPXUSDT (+1.22%, Vol: 62.23%, RSI: 78 ⚠️)`, `DOODUSDT (-0.72%, Vol: -23.14%, RSI: 34)`
+    - **M1-Premium:** `GRVTUSDT (+0.74%)`, `SPXUSDT (+1.22%)`
+    - **V3 Volume:** `GRVTUSDT (+139.97%)`, `AEROUSDT (+696.78%)`, `BTCUSDT (+26.82%)`
+    - **Funding Rate (FR):** `BTWUSDT (-0.2586%)`, `SANDUSDT (-0.1014%)`
+    - **4S:** `KORUUSDT (+8.24%)`, `ZECUSDT (+4.73%)`, `SNDKUSDT (+4.04%)`
+
+
